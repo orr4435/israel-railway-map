@@ -1,11 +1,5 @@
-/**
- * Server-side proxy → sheets-connector.vercel.app
- * Uses Node.js built-in `https` so it works on any Node version.
- */
-
-const https = require('https');
-const http  = require('http');
-const { URL } = require('url');
+/* eslint-disable @typescript-eslint/no-var-requires */
+const fetch = require('node-fetch');
 
 const API_BASE   = 'https://sheets-connector.vercel.app';
 const PROJECT_ID = '8a1144db-1cbf-4141-90b2-85021a633ed5';
@@ -17,77 +11,46 @@ const CORS = {
   'Access-Control-Allow-Headers': 'Content-Type',
 };
 
-// Simple HTTP client using Node built-ins
-function request(urlStr, opts = {}) {
-  return new Promise((resolve, reject) => {
-    const parsed  = new URL(urlStr);
-    const lib     = parsed.protocol === 'https:' ? https : http;
-    const options = {
-      hostname: parsed.hostname,
-      port:     parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
-      path:     parsed.pathname + parsed.search,
-      method:   opts.method || 'GET',
-      headers:  opts.headers || {},
-    };
-
-    const req = lib.request(options, (res) => {
-      const chunks = [];
-      res.on('data', c => chunks.push(c));
-      res.on('end', () => {
-        resolve({ status: res.status || res.statusCode, body: Buffer.concat(chunks).toString('utf8') });
-      });
-    });
-
-    req.on('error', reject);
-    if (opts.body) req.write(opts.body);
-    req.end();
-  });
+function ok(statusCode, body) {
+  return { statusCode, headers: { ...CORS, 'Content-Type': 'application/json' }, body };
 }
 
-function reply(statusCode, data) {
-  return {
-    statusCode,
-    headers: { ...CORS, 'Content-Type': 'application/json' },
-    body: typeof data === 'string' ? data : JSON.stringify(data),
-  };
-}
+exports.handler = async function(event) {
+  if (event.httpMethod === 'OPTIONS') return ok(204, '');
 
-exports.handler = async (event) => {
-  if (event.httpMethod === 'OPTIONS') return reply(204, '');
+  const q     = event.queryStringParameters || {};
+  const table = q.table;
+  const id    = q.id;
+  if (!table) return ok(400, JSON.stringify({ error: 'Missing ?table' }));
 
-  const params = { ...(event.queryStringParameters || {}) };
-  const table  = params.table;
-  const id     = params.id;
-  delete params.table;
-  delete params.id;
+  // Forward remaining query params (limit, offset…)
+  const fwd = Object.entries(q)
+    .filter(([k]) => k !== 'table' && k !== 'id')
+    .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
+    .join('&');
 
-  if (!table) return reply(400, { error: 'Missing ?table= param' });
+  const path = `${API_BASE}/api/v1/projects/${PROJECT_ID}/tables/${table}` +
+               (id  ? `/${encodeURIComponent(id)}` : '') +
+               (fwd ? `?${fwd}` : '');
 
-  const qs           = new URLSearchParams(params).toString();
-  const upstreamPath = id ? `/${table}/${encodeURIComponent(id)}` : `/${table}`;
-  const upstreamUrl  = `${API_BASE}/api/v1/projects/${PROJECT_ID}/tables${upstreamPath}${qs ? '?' + qs : ''}`;
-  const method       = event.httpMethod;
+  const method = event.httpMethod;
+  let   body   = event.isBase64Encoded
+    ? Buffer.from(event.body || '', 'base64').toString('utf8')
+    : (event.body || null);
 
-  let rawBody = event.body || '{}';
-  if (event.isBase64Encoded) rawBody = Buffer.from(rawBody, 'base64').toString('utf8');
-
-  console.log(`[sheets] ${method} ${upstreamUrl}`);
+  console.log('[sheets]', method, path);
 
   try {
-    const upstream = await request(upstreamUrl, {
+    const res  = await fetch(path, {
       method,
-      headers: {
-        'x-api-key':    API_KEY,
-        'Content-Type': 'application/json',
-        ...(rawBody && rawBody !== '{}' ? { 'Content-Length': Buffer.byteLength(rawBody) } : {}),
-      },
-      body: (method === 'POST' || method === 'PATCH') ? rawBody : undefined,
+      headers: { 'x-api-key': API_KEY, 'Content-Type': 'application/json' },
+      body: (method === 'POST' || method === 'PATCH') ? body : undefined,
     });
-
-    console.log(`[sheets] upstream → ${upstream.status}`, upstream.body.slice(0, 200));
-    return reply(upstream.status, upstream.body);
-  } catch (err) {
-    console.error('[sheets] error:', err);
-    return reply(502, { error: String(err) });
+    const text = await res.text();
+    console.log('[sheets] status', res.status, text.slice(0, 200));
+    return ok(res.status, text);
+  } catch (e) {
+    console.error('[sheets] error', e);
+    return ok(502, JSON.stringify({ error: String(e) }));
   }
 };
