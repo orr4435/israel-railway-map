@@ -6,7 +6,7 @@ import { Plus, Maximize2, Minimize2, CloudOff, Cloud, Loader2 } from 'lucide-rea
 import { AddStationForm } from './components/AddStationForm';
 import { AddProjectForm } from './components/AddProjectForm';
 import {
-  sheetsEnabled,
+  sheetsEnabled, canWrite,
   loadProjects, saveProject,
   loadCustomStations, saveStation,
 } from './lib/sheets';
@@ -117,7 +117,7 @@ function App() {
     setPoints(prev => [...prev, p]);
     setActivePoint(p);
     setShowAddStation(false);
-    if (sheetsEnabled) {
+    if (canWrite) {
       try { await saveStation(p); setSyncStatus('ok'); }
       catch { setSyncStatus('error'); }
     }
@@ -128,7 +128,7 @@ function App() {
     setProjects(prev => [...prev, p]);
     setActiveProject(p);
     setShowAddProject(false);
-    if (sheetsEnabled) {
+    if (canWrite) {
       try { await saveProject(p); setSyncStatus('ok'); }
       catch { setSyncStatus('error'); }
     }
@@ -149,19 +149,18 @@ function App() {
   // ── Sync indicator ─────────────────────────────────────────────────────────
 
   const SyncBadge = () => {
-    if (!sheetsEnabled) return null;
     const map: Record<SyncStatus, { icon: React.ReactNode; cls: string; title: string }> = {
-      idle:    { icon: <Cloud size={14} />,                               cls: 'text-gray-400',  title: 'Sheets: מחובר' },
-      loading: { icon: <Loader2 size={14} className="animate-spin" />,    cls: 'text-blue-400',  title: 'מסנכרן…' },
-      ok:      { icon: <Cloud size={14} />,                               cls: 'text-green-500', title: 'Sheets: מסונכרן' },
-      error:   { icon: <CloudOff size={14} />,                            cls: 'text-red-400',   title: 'שגיאת סנכרון Sheets' },
+      idle:    { icon: <Cloud size={14} />,                             cls: 'text-gray-400',  title: canWrite ? 'Sheets: קריאה + כתיבה' : 'Sheets: קריאה בלבד' },
+      loading: { icon: <Loader2 size={14} className="animate-spin" />, cls: 'text-blue-400',  title: 'מסנכרן…' },
+      ok:      { icon: <Cloud size={14} />,                            cls: 'text-green-500', title: canWrite ? 'Sheets: מסונכרן' : 'Sheets: נטען בהצלחה' },
+      error:   { icon: <CloudOff size={14} />,                         cls: 'text-red-400',   title: 'שגיאת חיבור ל-Sheets' },
     };
     const { icon, cls, title } = map[syncStatus];
     return (
       <button onClick={fetchFromSheets} title={title}
         className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-colors ${cls} hover:bg-gray-100`}>
         {icon}
-        <span className="hidden sm:inline">Sheets</span>
+        <span className="hidden sm:inline">{canWrite ? 'Sheets ✏️' : 'Sheets'}</span>
       </button>
     );
   };

@@ -1,25 +1,27 @@
 import { Project, StoryPoint, ProjectType, GeoGeometry } from '../types';
 
-// ── Base URL ──────────────────────────────────────────────────────────────────
-// Strip any query-string from whatever URL the env provides (or the default)
+// ── Read: Published CSV (no auth, CORS-free) ──────────────────────────────────
 const CSV_BASE = (() => {
   const raw = (import.meta.env.VITE_SHEETS_CSV_URL as string | undefined)
     ?? 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT1gPbkvJTIY6ZztmORgUxGiE17fYrVH30X7LsW57ELt7jIrXFbFyjkzBDRxNHPiLWUWPq1tKSLJHJK/pub';
   return raw.split('?')[0];
 })();
 
-export const sheetsEnabled = true;
+// ── Write: Apps Script Web App (set VITE_SHEETS_API_URL to enable) ────────────
+const API_URL = import.meta.env.VITE_SHEETS_API_URL as string | undefined;
+
+export const sheetsEnabled = true;   // read always works
+export const canWrite = !!API_URL;   // write only when API URL is configured
+
+// ── CSV helpers ───────────────────────────────────────────────────────────────
 
 const csvUrl = (sheet: string) =>
   `${CSV_BASE}?output=csv&sheet=${encodeURIComponent(sheet)}`;
-
-// ── CSV parser ────────────────────────────────────────────────────────────────
 
 function parseCSVLine(line: string): string[] {
   const result: string[] = [];
   let current = '';
   let inQuotes = false;
-
   for (let i = 0; i < line.length; i++) {
     const c = line[i];
     if (c === '"') {
@@ -36,19 +38,32 @@ function parseCSVLine(line: string): string[] {
 }
 
 function parseCSV(text: string): Record<string, string>[] {
-  const clean = text.replace(/^﻿/, '');           // strip BOM
+  const clean = text.replace(/^﻿/, '');
   const lines = clean.split(/\r?\n/).filter(l => l.trim() !== '');
   if (lines.length < 2) return [];
-
   const headers = parseCSVLine(lines[0]).map(h => h.trim());
   return lines.slice(1).map((line, idx) => {
     const values = parseCSVLine(line);
     const row: Record<string, string> = {};
     headers.forEach((h, i) => { row[h] = (values[i] ?? '').trim(); });
-    // Auto-generate id if missing (manual entry in sheet)
     if (!row.id) row.id = `sheet-${idx + 1}`;
     return row;
   });
+}
+
+// ── Write helper: POST to Apps Script ────────────────────────────────────────
+// Uses Content-Type: text/plain to avoid CORS preflight (simple request).
+
+async function apiPost(body: object): Promise<void> {
+  if (!API_URL) throw new Error('VITE_SHEETS_API_URL not configured');
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const json = await res.json();
+  if (json.error) throw new Error(json.error);
 }
 
 // ── Row ↔ Project ─────────────────────────────────────────────────────────────
@@ -56,7 +71,6 @@ function parseCSV(text: string): Record<string, string>[] {
 export function rowToProject(row: Record<string, string>): Project {
   let geometry: GeoGeometry | undefined;
   try { if (row.geometry) geometry = JSON.parse(row.geometry); } catch { /* skip */ }
-
   return {
     id:                     row.id,
     title:                  row.title,
@@ -101,7 +115,6 @@ export function projectToRow(p: Project): Record<string, string> {
 export function rowToStation(row: Record<string, string>): StoryPoint {
   let geometry: GeoGeometry | undefined;
   try { if (row.geometry) geometry = JSON.parse(row.geometry); } catch { /* skip */ }
-
   return {
     id:          row.id,
     title:       row.title,
@@ -109,8 +122,8 @@ export function rowToStation(row: Record<string, string>): StoryPoint {
     status:      row.status      || 'אחר',
     location:    { lat: Number(row.lat) || 0, lng: Number(row.lng) || 0 },
     geometry,
-    image:       row.image    || undefined,
-    link:        row.linkUrl  ? { url: row.linkUrl, label: row.linkLabel || row.linkUrl } : undefined,
+    image:       row.image   || undefined,
+    link:        row.linkUrl ? { url: row.linkUrl, label: row.linkLabel || row.linkUrl } : undefined,
   };
 }
 
@@ -130,21 +143,10 @@ export function stationToRow(s: StoryPoint): Record<string, string> {
   };
 }
 
-// ── Fetch helpers ─────────────────────────────────────────────────────────────
-
-async function fetchSheet(sheet: string): Promise<Record<string, string>[]> {
-  const res = await fetch(csvUrl(sheet));
-  if (!res.ok) throw new Error(`HTTP ${res.status} for sheet "${sheet}"`);
-  const text = await res.text();
-  return parseCSV(text);
-}
-
-// ── Public API ────────────────────────────────────────────────────────────────
+// ── Public read API ───────────────────────────────────────────────────────────
 
 export async function loadProjects(): Promise<Project[]> {
-  // Try named tab "projects" first; fall back to whichever tab is default (no &sheet=)
-  const attempts = [csvUrl('projects'), `${CSV_BASE}?output=csv`];
-  for (const url of attempts) {
+  for (const url of [csvUrl('projects'), `${CSV_BASE}?output=csv`]) {
     try {
       const res = await fetch(url);
       if (!res.ok) continue;
@@ -157,14 +159,30 @@ export async function loadProjects(): Promise<Project[]> {
 
 export async function loadCustomStations(): Promise<StoryPoint[]> {
   try {
-    const rows = await fetchSheet('stations');
-    return rows.filter(r => r.title?.trim()).map(rowToStation);
+    const res = await fetch(csvUrl('stations'));
+    if (!res.ok) return [];
+    return parseCSV(await res.text())
+      .filter(r => r.title?.trim())
+      .map(rowToStation);
   } catch {
-    return []; // stations sheet is optional
+    return [];
   }
 }
 
-// Write stubs — CSV is read-only; items added via the form live in local state.
-// To persist them, add the row manually in Google Sheets.
-export async function saveProject(_p: Project): Promise<void> { /* read-only */ }
-export async function saveStation(_s: StoryPoint): Promise<void> { /* read-only */ }
+// ── Public write API (requires VITE_SHEETS_API_URL) ───────────────────────────
+
+export async function saveProject(project: Project): Promise<void> {
+  await apiPost({ action: 'add', sheet: 'projects', data: projectToRow(project) });
+}
+
+export async function saveStation(station: StoryPoint): Promise<void> {
+  await apiPost({ action: 'add', sheet: 'stations', data: stationToRow(station) });
+}
+
+export async function deleteProject(id: string): Promise<void> {
+  await apiPost({ action: 'delete', sheet: 'projects', id });
+}
+
+export async function deleteStation(id: string): Promise<void> {
+  await apiPost({ action: 'delete', sheet: 'stations', id });
+}
