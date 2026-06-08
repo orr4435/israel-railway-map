@@ -9,6 +9,7 @@ import {
   sheetsEnabled, canWrite,
   loadProjects, saveProject,
   loadCustomStations, saveStation,
+  diagnoseSheets, type SheetsDiag,
 } from './lib/sheets';
 
 type SyncStatus = 'idle' | 'loading' | 'ok' | 'error';
@@ -26,6 +27,7 @@ function App() {
   const [showAddProject,  setShowAddProject]  = useState(false);
   const [error,         setError]         = useState<string | null>(null);
   const [syncStatus,    setSyncStatus]    = useState<SyncStatus>('idle');
+  const [diag,          setDiag]          = useState<SheetsDiag | null>(null);
 
   useEffect(() => {
     fetchStations();
@@ -148,20 +150,30 @@ function App() {
 
   // ── Sync indicator ─────────────────────────────────────────────────────────
 
+  const runDiag = async () => {
+    setSyncStatus('loading');
+    const d = await diagnoseSheets();
+    setDiag(d);
+    setSyncStatus(d.ok ? 'ok' : 'error');
+  };
+
   const SyncBadge = () => {
-    const map: Record<SyncStatus, { icon: React.ReactNode; cls: string; title: string }> = {
-      idle:    { icon: <Cloud size={14} />,                             cls: 'text-gray-400',  title: canWrite ? 'Sheets: קריאה + כתיבה' : 'Sheets: קריאה בלבד' },
-      loading: { icon: <Loader2 size={14} className="animate-spin" />, cls: 'text-blue-400',  title: 'מסנכרן…' },
-      ok:      { icon: <Cloud size={14} />,                            cls: 'text-green-500', title: canWrite ? 'Sheets: מסונכרן' : 'Sheets: נטען בהצלחה' },
-      error:   { icon: <CloudOff size={14} />,                         cls: 'text-red-400',   title: 'שגיאת חיבור ל-Sheets' },
+    const map: Record<SyncStatus, { icon: React.ReactNode; cls: string }> = {
+      idle:    { icon: <Cloud size={14} />,                             cls: 'text-gray-400'  },
+      loading: { icon: <Loader2 size={14} className="animate-spin" />, cls: 'text-blue-400'  },
+      ok:      { icon: <Cloud size={14} />,                            cls: 'text-green-500' },
+      error:   { icon: <CloudOff size={14} />,                         cls: 'text-red-400'   },
     };
-    const { icon, cls, title } = map[syncStatus];
+    const { icon, cls } = map[syncStatus];
     return (
-      <button onClick={fetchFromSheets} title={title}
-        className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-colors ${cls} hover:bg-gray-100`}>
-        {icon}
-        <span className="hidden sm:inline">{canWrite ? 'Sheets ✏️' : 'Sheets'}</span>
-      </button>
+      <div className="flex items-center gap-1">
+        <button onClick={fetchFromSheets} title="רענן מ-Sheets"
+          className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-colors ${cls} hover:bg-gray-100`}>
+          {icon}<span className="hidden sm:inline">Sheets</span>
+        </button>
+        <button onClick={runDiag} title="אבחן חיבור ל-Sheets"
+          className="px-1.5 py-1 rounded text-xs text-gray-400 hover:bg-gray-100 hover:text-gray-700">🔍</button>
+      </div>
     );
   };
 
@@ -231,6 +243,44 @@ function App() {
 
       {showAddStation && <AddStationForm onSubmit={handleAddStation} onClose={() => setShowAddStation(false)} />}
       {showAddProject && <AddProjectForm onSubmit={handleAddProject} onClose={() => setShowAddProject(false)} />}
+
+      {/* Sheets diagnostic modal */}
+      {diag && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setDiag(null)}>
+          <div className="bg-white rounded-xl shadow-xl p-5 w-full max-w-md text-sm" dir="ltr" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-bold text-gray-800">Sheets Diagnostic — RAIL1</h3>
+              <button onClick={() => setDiag(null)} className="text-gray-400 hover:text-gray-700 text-lg leading-none">✕</button>
+            </div>
+
+            <div className={`mb-3 px-3 py-2 rounded-lg font-semibold ${diag.ok ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+              {diag.ok ? `✅ Connected — ${diag.rowCount} rows` : `❌ Failed (HTTP ${diag.rawStatus})`}
+            </div>
+
+            {diag.error && (
+              <div className="mb-3 bg-red-50 rounded p-2 text-red-600 break-all text-xs">{diag.error}</div>
+            )}
+
+            {diag.columns.length > 0 ? (
+              <div className="mb-3">
+                <p className="font-semibold text-gray-700 mb-1">Columns found ({diag.columns.length}):</p>
+                <div className="flex flex-wrap gap-1">
+                  {diag.columns.map(c => (
+                    <span key={c} className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs font-mono">{c}</span>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="mb-3 text-amber-700 bg-amber-50 rounded p-2 text-xs">
+                <strong>No rows found.</strong> The sheet may be empty or column names don't match.<br/>
+                Expected columns: <span className="font-mono">id, title, projectType, lat, lng, geometry, targetYear, cost, trafficPurpose, trafficClosureDate, trafficClosureDuration, contractor, managementCompany, image, notes, createdAt</span>
+              </div>
+            )}
+
+            <p className="text-gray-400 text-xs">Click outside to close</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
