@@ -39,13 +39,23 @@ export const PROJECT_TYPES: { type: ProjectType; label: string; color: string; i
 export interface Project {
   id: string;
   title: string;
-  targetYear: string;
-  cost: string;
+  projectType?: ProjectType;
   location: GeoPoint;
-  geometry?: GeoGeometry;   // drawn geometry (point or polyline)
+  geometry?: GeoGeometry;
+
+  // Regular project fields
+  targetYear?: string;
+  cost?: string;
+
+  // Traffic-arrangement specific fields (used when projectType === 'הסדרי_תנועה')
+  trafficPurpose?: string;        // מטרת ההסדר
+  trafficClosureDate?: string;    // מועד סגירה משוער
+  trafficClosureDuration?: string;// משך סגירה משוער
+  contractor?: string;            // קבלן
+  managementCompany?: string;     // חברת ניהול
+
   image?: string;
   notes?: string;
-  projectType?: ProjectType;
 }
 
 // ── RailSegment (מסילות — from status.geojson) ───────────────────────────────

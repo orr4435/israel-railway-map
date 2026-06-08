@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
-import { StoryPoint, Project, RailSegment, STATUS_COLORS, SEGMENT_STATUS_COLORS, getStatusStyle, getSegmentStyle } from '../types';
-import { Train, FolderKanban, MapPin, Calendar, DollarSign, Ruler } from 'lucide-react';
+import { StoryPoint, Project, RailSegment, STATUS_COLORS, SEGMENT_STATUS_COLORS, PROJECT_TYPES, getStatusStyle, getSegmentStyle } from '../types';
+import { Train, FolderKanban, MapPin, Calendar, DollarSign, Ruler, Clock, Wrench } from 'lucide-react';
 
 interface Props {
   points: StoryPoint[];
@@ -174,16 +174,34 @@ export function Dashboard({ points, projects, segments }: Props) {
           : [...projects]
               .sort((a, b) => Number(b.id.split('-')[1]) - Number(a.id.split('-')[1]))
               .slice(0, 6)
-              .map(proj => (
-                <div key={proj.id} className="mb-2 rounded-lg border border-green-100 bg-green-50 px-3 py-2">
-                  <p className="text-sm font-semibold text-green-800 truncate">{proj.title}</p>
-                  <div className="flex items-center gap-3 mt-0.5 text-xs text-green-600">
-                    <span className="flex items-center gap-1"><Calendar size={10} />{proj.targetYear}</span>
-                    <span className="flex items-center gap-1"><DollarSign size={10} />{proj.cost}</span>
+              .map(proj => {
+                const isTraffic = proj.projectType === 'הסדרי_תנועה';
+                const typeInfo  = PROJECT_TYPES.find(t => t.type === proj.projectType);
+                const borderCls = isTraffic ? 'border-red-100 bg-red-50' : 'border-green-100 bg-green-50';
+                const textCls   = isTraffic ? 'text-red-800' : 'text-green-800';
+                const metaCls   = isTraffic ? 'text-red-600' : 'text-green-600';
+                return (
+                  <div key={proj.id} className={`mb-2 rounded-lg border px-3 py-2 ${borderCls}`}>
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      {typeInfo && <span className="text-[11px]">{typeInfo.icon}</span>}
+                      <p className={`text-sm font-semibold truncate ${textCls}`}>{proj.title}</p>
+                    </div>
+                    {isTraffic ? (
+                      <div className="flex items-center gap-3 text-xs" style={{ color: '#dc2626aa' }}>
+                        {proj.trafficClosureDate && <span className="flex items-center gap-1"><Calendar size={10} />{proj.trafficClosureDate}</span>}
+                        {proj.trafficClosureDuration && <span className="flex items-center gap-1"><Clock size={10} />{proj.trafficClosureDuration}</span>}
+                        {proj.contractor && <span className="flex items-center gap-1"><Wrench size={10} />{proj.contractor}</span>}
+                      </div>
+                    ) : (
+                      <div className={`flex items-center gap-3 text-xs ${metaCls}`}>
+                        {proj.targetYear && <span className="flex items-center gap-1"><Calendar size={10} />{proj.targetYear}</span>}
+                        {proj.cost       && <span className="flex items-center gap-1"><DollarSign size={10} />{proj.cost}</span>}
+                      </div>
+                    )}
+                    {proj.notes && <p className="text-xs text-gray-400 mt-0.5 truncate">{proj.notes}</p>}
                   </div>
-                  {proj.notes && <p className="text-xs text-gray-400 mt-0.5 truncate">{proj.notes}</p>}
-                </div>
-              ))
+                );
+              })
         }
       </section>
     </div>

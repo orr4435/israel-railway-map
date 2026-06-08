@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { StoryPoint, Project, RailSegment, getStatusStyle, getSegmentStyle, PROJECT_TYPES } from '../types';
-import { ExternalLink, MapPin, FileText, LayoutDashboard, Calendar, DollarSign, Train, ChevronRight, ChevronLeft } from 'lucide-react';
+import { ExternalLink, MapPin, FileText, LayoutDashboard, Calendar, DollarSign, Train, ChevronRight, ChevronLeft, Clock, Wrench, Building2 } from 'lucide-react';
 import { Dashboard } from './Dashboard';
 
 interface Props {
@@ -197,34 +197,74 @@ export function StoryPanel({ points, activePoint, onPointSelect, projects, activ
                   {project.image && (
                     <img src={project.image} alt={project.title} className={`w-full object-cover ${isExpanded ? 'h-48' : 'h-32'}`} />
                   )}
-                  <div className="p-3 h-[86px] flex flex-col justify-between">
-                    {/* row 1: title + year badge */}
-                    <div className="flex items-start justify-between gap-2">
-                      <h3 className="font-bold text-gray-800 text-sm line-clamp-1">{project.title}</h3>
-                      <span className="shrink-0 text-[10px] font-bold rounded-full px-2 py-0.5"
-                        style={{ background: typeClr + '22', color: typeClr }}>
-                        {project.targetYear}
-                      </span>
-                    </div>
-                    {/* row 2: type + cost */}
-                    <div className="flex items-center gap-2 text-xs">
-                      {typeInfo && (
-                        <span className="flex items-center gap-1 font-medium" style={{ color: typeClr }}>
-                          {typeInfo.icon} {typeInfo.label}
+                  {project.projectType === 'הסדרי_תנועה' ? (
+                    /* ── Traffic card ── */
+                    <div className="p-3 h-[96px] flex flex-col justify-between">
+                      <div className="flex items-start justify-between gap-2">
+                        <h3 className="font-bold text-gray-800 text-sm line-clamp-1">{project.title}</h3>
+                        <span className="shrink-0 text-[10px] font-bold rounded-full px-2 py-0.5"
+                          style={{ background: typeClr + '22', color: typeClr }}>
+                          {typeInfo?.icon} {typeInfo?.label}
                         </span>
+                      </div>
+                      {project.trafficPurpose && (
+                        <div className="text-xs text-gray-600 line-clamp-1">
+                          <span className="text-gray-400">מטרה: </span>{project.trafficPurpose}
+                        </div>
                       )}
-                      <span className="flex items-center gap-1 text-gray-500">
-                        <DollarSign size={10} className="text-gray-400" />{project.cost}
-                      </span>
+                      <div className="flex items-center gap-3 text-xs text-gray-500 flex-wrap">
+                        {project.trafficClosureDate && (
+                          <span className="flex items-center gap-1">
+                            <Calendar size={10} className="text-red-400" />{project.trafficClosureDate}
+                          </span>
+                        )}
+                        {project.trafficClosureDuration && (
+                          <span className="flex items-center gap-1">
+                            <Clock size={10} className="text-red-400" />{project.trafficClosureDuration}
+                          </span>
+                        )}
+                        {project.contractor && (
+                          <span className="flex items-center gap-1">
+                            <Wrench size={10} className="text-gray-400" />{project.contractor}
+                          </span>
+                        )}
+                        {project.managementCompany && (
+                          <span className="flex items-center gap-1">
+                            <Building2 size={10} className="text-gray-400" />{project.managementCompany}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    {/* row 3: notes / location */}
-                    <div className="flex items-center gap-1 text-xs text-gray-400">
-                      {project.notes
-                        ? <span className="line-clamp-1">{project.notes}</span>
-                        : <span className="flex items-center gap-1"><Calendar size={10} />שנת יעד: {project.targetYear}</span>
-                      }
+                  ) : (
+                    /* ── Regular project card ── */
+                    <div className="p-3 h-[86px] flex flex-col justify-between">
+                      <div className="flex items-start justify-between gap-2">
+                        <h3 className="font-bold text-gray-800 text-sm line-clamp-1">{project.title}</h3>
+                        <span className="shrink-0 text-[10px] font-bold rounded-full px-2 py-0.5"
+                          style={{ background: typeClr + '22', color: typeClr }}>
+                          {project.targetYear}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs">
+                        {typeInfo && (
+                          <span className="flex items-center gap-1 font-medium" style={{ color: typeClr }}>
+                            {typeInfo.icon} {typeInfo.label}
+                          </span>
+                        )}
+                        {project.cost && (
+                          <span className="flex items-center gap-1 text-gray-500">
+                            <DollarSign size={10} className="text-gray-400" />{project.cost}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-gray-400">
+                        {project.notes
+                          ? <span className="line-clamp-1">{project.notes}</span>
+                          : <span className="flex items-center gap-1"><Calendar size={10} />שנת יעד: {project.targetYear}</span>
+                        }
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               );
             })}

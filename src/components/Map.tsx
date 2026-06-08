@@ -398,16 +398,30 @@ export function Map({ points, activePoint, onMarkerClick, projects, activeProjec
             icon={makeProjectIcon(project.projectType, active)}
             eventHandlers={{ click: () => onProjectClick(project) }}>
             <Popup>
-              <div dir="rtl" style={{ minWidth: 180 }}>
+              <div dir="rtl" style={{ minWidth: 190, fontFamily: 'inherit' }}>
                 <span style={{ display:'inline-block', background: typeClr + '22', color: typeClr,
                   border:`1px solid ${typeClr}55`, borderRadius:999, padding:'1px 8px',
                   fontSize:11, fontWeight:600, marginBottom:4 }}>
                   {typeInfo?.icon ?? ''} {typeLbl}
                 </span>
-                <strong style={{ display:'block', color:'#166534', marginTop:2 }}>{project.title}</strong>
-                <p style={{ fontSize:12, color:'#555', margin:'4px 0 0' }}>שנת יעד: {project.targetYear}</p>
-                <p style={{ fontSize:12, color:'#555' }}>עלות: {project.cost}</p>
-                {project.notes && <p style={{ fontSize:11, color:'#888', marginTop:4 }}>{project.notes}</p>}
+                <strong style={{ display:'block', color:'#166534', marginTop:2, fontSize:14 }}>{project.title}</strong>
+
+                {project.projectType === 'הסדרי_תנועה' ? (
+                  <table style={{ fontSize:12, color:'#555', marginTop:6, width:'100%', borderCollapse:'collapse' }}>
+                    {project.trafficPurpose         && <tr><td style={{ color:'#888', paddingBottom:2 }}>מטרת ההסדר</td><td style={{ paddingRight:8, fontWeight:600 }}>{project.trafficPurpose}</td></tr>}
+                    {project.trafficClosureDate     && <tr><td style={{ color:'#888', paddingBottom:2 }}>מועד סגירה</td><td style={{ paddingRight:8, fontWeight:600 }}>{project.trafficClosureDate}</td></tr>}
+                    {project.trafficClosureDuration && <tr><td style={{ color:'#888', paddingBottom:2 }}>משך סגירה</td><td style={{ paddingRight:8, fontWeight:600 }}>{project.trafficClosureDuration}</td></tr>}
+                    {project.contractor             && <tr><td style={{ color:'#888', paddingBottom:2 }}>קבלן</td><td style={{ paddingRight:8, fontWeight:600 }}>{project.contractor}</td></tr>}
+                    {project.managementCompany      && <tr><td style={{ color:'#888', paddingBottom:2 }}>חברת ניהול</td><td style={{ paddingRight:8, fontWeight:600 }}>{project.managementCompany}</td></tr>}
+                    {project.notes                  && <tr><td style={{ color:'#888', paddingBottom:2 }}>הערות</td><td style={{ paddingRight:8 }}>{project.notes}</td></tr>}
+                  </table>
+                ) : (
+                  <table style={{ fontSize:12, color:'#555', marginTop:6, width:'100%', borderCollapse:'collapse' }}>
+                    {project.targetYear && <tr><td style={{ color:'#888', paddingBottom:2 }}>שנת יעד</td><td style={{ paddingRight:8, fontWeight:600 }}>{project.targetYear}</td></tr>}
+                    {project.cost       && <tr><td style={{ color:'#888', paddingBottom:2 }}>עלות</td><td style={{ paddingRight:8, fontWeight:600 }}>{project.cost}</td></tr>}
+                    {project.notes      && <tr><td style={{ color:'#888', paddingBottom:2 }}>הערות</td><td style={{ paddingRight:8 }}>{project.notes}</td></tr>}
+                  </table>
+                )}
               </div>
             </Popup>
           </Marker>
