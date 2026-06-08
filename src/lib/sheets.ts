@@ -1,15 +1,17 @@
 import { Project, StoryPoint, ProjectType, GeoGeometry } from '../types';
 
 // ── Config ────────────────────────────────────────────────────────────────────
-const API_BASE    = 'https://sheets-connector.vercel.app';
-const PROJECT_ID  = '8a1144db-1cbf-4141-90b2-85021a633ed5';
-const PROJ_TABLE  = 'RAIL1';
-const STN_TABLE   = import.meta.env.VITE_STATIONS_TABLE as string | undefined; // optional
+const PROJ_TABLE = 'RAIL1';
+const STN_TABLE  = import.meta.env.VITE_STATIONS_TABLE as string | undefined;
+const API_KEY    = import.meta.env.VITE_API_KEY as string | undefined;
 
-const API_KEY     = import.meta.env.VITE_API_KEY as string | undefined;
+// All API calls go through the Netlify Function proxy (avoids CORS entirely).
+// In production: /.netlify/functions/sheets  (Netlify runs it server-side)
+// In dev:        Vite proxy rewrites the same path to upstream + injects api key
+const PROXY = '/.netlify/functions/sheets';
 
-// Fallback: published CSV for read-only when no API key
-const CSV_BASE    = (() => {
+// Fallback: published CSV for read-only when no API key is configured
+const CSV_BASE = (() => {
   const raw = (import.meta.env.VITE_SHEETS_CSV_URL as string | undefined)
     ?? 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT1gPbkvJTIY6ZztmORgUxGiE17fYrVH30X7LsW57ELt7jIrXFbFyjkzBDRxNHPiLWUWPq1tKSLJHJK/pub';
   return raw.split('?')[0];
@@ -18,34 +20,31 @@ const CSV_BASE    = (() => {
 export const sheetsEnabled = true;
 export const canWrite      = !!API_KEY;
 
-// ── REST helpers ──────────────────────────────────────────────────────────────
+// ── Proxy helpers ─────────────────────────────────────────────────────────────
 
-const tableUrl = (table: string) =>
-  `${API_BASE}/api/v1/projects/${PROJECT_ID}/tables/${table}`;
+function proxyUrl(table: string, id?: string, extra?: Record<string, string>): string {
+  const p = new URLSearchParams({ table, ...extra });
+  if (id) p.set('id', id);
+  return `${PROXY}?${p}`;
+}
 
-const authHeaders = (): Record<string, string> => ({
-  'x-api-key':    API_KEY!,
-  'Content-Type': 'application/json',
-});
+const jsonHeaders = { 'Content-Type': 'application/json' };
 
 // Unwrap whatever envelope the API uses
 function extractRows(json: unknown): Record<string, unknown>[] {
   if (Array.isArray(json)) return json as Record<string, unknown>[];
   const j = json as Record<string, unknown>;
-  const candidate = j['data'] ?? j['records'] ?? j['rows'] ?? j['items'] ?? [];
-  return Array.isArray(candidate) ? candidate as Record<string, unknown>[] : [];
+  const c = j['data'] ?? j['records'] ?? j['rows'] ?? j['items'] ?? [];
+  return Array.isArray(c) ? c as Record<string, unknown>[] : [];
 }
 
-// Fetch all rows, handling pagination automatically
+// Fetch all rows via proxy, handling pagination
 async function apiList(table: string): Promise<Record<string, unknown>[]> {
   const limit = 100;
   let offset  = 0;
   const all: Record<string, unknown>[] = [];
-
   while (true) {
-    const res = await fetch(`${tableUrl(table)}?limit=${limit}&offset=${offset}`, {
-      headers: authHeaders(),
-    });
+    const res = await fetch(proxyUrl(table, undefined, { limit: String(limit), offset: String(offset) }));
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const batch = extractRows(await res.json());
     all.push(...batch);
@@ -56,28 +55,21 @@ async function apiList(table: string): Promise<Record<string, unknown>[]> {
 }
 
 async function apiPost(table: string, data: Record<string, string>): Promise<void> {
-  const res = await fetch(tableUrl(table), {
-    method:  'POST',
-    headers: authHeaders(),
-    body:    JSON.stringify(data),
+  const res = await fetch(proxyUrl(table), {
+    method: 'POST', headers: jsonHeaders, body: JSON.stringify(data),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
 }
 
 async function apiPatch(table: string, id: string, data: Partial<Record<string, string>>): Promise<void> {
-  const res = await fetch(`${tableUrl(table)}/${id}`, {
-    method:  'PATCH',
-    headers: authHeaders(),
-    body:    JSON.stringify(data),
+  const res = await fetch(proxyUrl(table, id), {
+    method: 'PATCH', headers: jsonHeaders, body: JSON.stringify(data),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
 }
 
 async function apiDelete(table: string, id: string): Promise<void> {
-  const res = await fetch(`${tableUrl(table)}/${id}`, {
-    method:  'DELETE',
-    headers: authHeaders(),
-  });
+  const res = await fetch(proxyUrl(table, id), { method: 'DELETE' });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
 }
 
