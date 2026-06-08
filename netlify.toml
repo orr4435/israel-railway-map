@@ -5,14 +5,7 @@
 [functions]
   directory = "netlify/functions"
 
-# Functions must come before the SPA catch-all
-[[redirects]]
-  from   = "/.netlify/functions/*"
-  to     = "/.netlify/functions/:splat"
-  status = 200
-  force  = true
-
-# SPA fallback
+# SPA fallback — Netlify routes /.netlify/functions/* automatically, before redirects
 [[redirects]]
   from   = "/*"
   to     = "/index.html"
