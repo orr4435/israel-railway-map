@@ -119,7 +119,7 @@ function App() {
     setShowAddStation(false);
     if (canWrite) {
       try { await saveStation(p); setSyncStatus('ok'); }
-      catch { setSyncStatus('error'); }
+      catch (e) { setSyncStatus('error'); setError(`שגיאה בשמירת תחנה: ${e instanceof Error ? e.message : e}`); }
     }
   };
 
@@ -130,7 +130,7 @@ function App() {
     setShowAddProject(false);
     if (canWrite) {
       try { await saveProject(p); setSyncStatus('ok'); }
-      catch { setSyncStatus('error'); }
+      catch (e) { setSyncStatus('error'); setError(`שגיאה בשמירת פרויקט: ${e instanceof Error ? e.message : e}`); }
     }
   };
 

@@ -1,8 +1,18 @@
 [build]
-  command   = "npm run build"
-  publish   = "dist"
+  command = "npm run build"
+  publish = "dist"
 
-# SPA fallback — all routes serve index.html
+[functions]
+  directory = "netlify/functions"
+
+# Functions must come before the SPA catch-all
+[[redirects]]
+  from   = "/.netlify/functions/*"
+  to     = "/.netlify/functions/:splat"
+  status = 200
+  force  = true
+
+# SPA fallback
 [[redirects]]
   from   = "/*"
   to     = "/index.html"

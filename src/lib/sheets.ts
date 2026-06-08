@@ -54,10 +54,19 @@ async function apiList(table: string): Promise<Record<string, unknown>[]> {
 }
 
 async function apiPost(table: string, data: Record<string, string>): Promise<void> {
-  const res = await fetch(proxyUrl(table), {
+  const res  = await fetch(proxyUrl(table), {
     method: 'POST', headers: jsonHeaders, body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const text = await res.text();
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${text}`);
+  // Some APIs return 200 with { error: "..." }
+  try {
+    const json = JSON.parse(text) as Record<string, unknown>;
+    if (json.error) throw new Error(String(json.error));
+  } catch (e) {
+    if (e instanceof SyntaxError) return; // not JSON → assume OK
+    throw e;
+  }
 }
 
 async function apiPatch(table: string, id: string, data: Partial<Record<string, string>>): Promise<void> {
