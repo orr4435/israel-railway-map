@@ -2,9 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { Map } from './components/Map';
 import { StoryPanel } from './components/StoryPanel';
 import { StoryPoint, Project, RailSegment } from './types';
-import { Plus, Maximize2, Minimize2 } from 'lucide-react';
+import { Plus, Maximize2, Minimize2, CloudOff, Cloud, Loader2 } from 'lucide-react';
 import { AddStationForm } from './components/AddStationForm';
 import { AddProjectForm } from './components/AddProjectForm';
+import {
+  sheetsEnabled,
+  loadProjects, saveProject,
+  loadCustomStations, saveStation,
+} from './lib/sheets';
+
+type SyncStatus = 'idle' | 'loading' | 'ok' | 'error';
 
 function App() {
   const [points,        setPoints]        = useState<StoryPoint[]>([]);
@@ -13,18 +20,21 @@ function App() {
   const [activeProject, setActiveProject] = useState<Project | undefined>();
   const [segments,      setSegments]      = useState<RailSegment[]>([]);
   const [activeSegment, setActiveSegment] = useState<RailSegment | undefined>();
-  const [statusGeoJSON, setStatusGeoJSON] = useState<any>(null);   // raw, sent to Map
+  const [statusGeoJSON, setStatusGeoJSON] = useState<any>(null);
   const [isExpanded,    setIsExpanded]    = useState(false);
   const [showAddStation,  setShowAddStation]  = useState(false);
   const [showAddProject,  setShowAddProject]  = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error,         setError]         = useState<string | null>(null);
+  const [syncStatus,    setSyncStatus]    = useState<SyncStatus>('idle');
 
   useEffect(() => {
     fetchStations();
     fetchSegments();
+    if (sheetsEnabled) fetchFromSheets();
   }, []);
 
-  // ── Stations (station.geojson) ──────────────────────────────────────────────
+  // ── GeoJSON loaders ────────────────────────────────────────────────────────
+
   const fetchStations = async () => {
     try {
       const res = await fetch('/station.geojson');
@@ -46,13 +56,12 @@ function App() {
     }
   };
 
-  // ── Rail segments (status.geojson) ─────────────────────────────────────────
   const fetchSegments = async () => {
     try {
       const res = await fetch('/status.geojson');
       if (!res.ok) throw new Error();
       const geo = await res.json();
-      setStatusGeoJSON(geo);                         // raw → Map
+      setStatusGeoJSON(geo);
 
       const segs: RailSegment[] = geo.features
         .filter((f: any) => f.geometry?.type === 'LineString')
@@ -78,20 +87,54 @@ function App() {
     }
   };
 
-  // ── Handlers ────────────────────────────────────────────────────────────────
-  const handleAddStation = (s: Omit<StoryPoint, 'id'>) => {
+  // ── Google Sheets sync ─────────────────────────────────────────────────────
+
+  const fetchFromSheets = async () => {
+    setSyncStatus('loading');
+    try {
+      const [sheetProjects, sheetStations] = await Promise.all([
+        loadProjects(),
+        loadCustomStations(),
+      ]);
+      if (sheetProjects.length > 0) setProjects(sheetProjects);
+      if (sheetStations.length > 0) {
+        setPoints(prev => {
+          const existingIds = new Set(prev.map(p => p.id));
+          const newOnes = sheetStations.filter(s => !existingIds.has(s.id));
+          return [...prev, ...newOnes];
+        });
+      }
+      setSyncStatus('ok');
+    } catch {
+      setSyncStatus('error');
+    }
+  };
+
+  // ── Add handlers ───────────────────────────────────────────────────────────
+
+  const handleAddStation = async (s: Omit<StoryPoint, 'id'>) => {
     const p: StoryPoint = { ...s, id: `local-${Date.now()}` };
     setPoints(prev => [...prev, p]);
     setActivePoint(p);
     setShowAddStation(false);
+    if (sheetsEnabled) {
+      try { await saveStation(p); setSyncStatus('ok'); }
+      catch { setSyncStatus('error'); }
+    }
   };
 
-  const handleAddProject = (s: Omit<Project, 'id'>) => {
+  const handleAddProject = async (s: Omit<Project, 'id'>) => {
     const p: Project = { ...s, id: `proj-${Date.now()}` };
     setProjects(prev => [...prev, p]);
     setActiveProject(p);
     setShowAddProject(false);
+    if (sheetsEnabled) {
+      try { await saveProject(p); setSyncStatus('ok'); }
+      catch { setSyncStatus('error'); }
+    }
   };
+
+  // ── Selection handlers ─────────────────────────────────────────────────────
 
   const selectStation = (p: StoryPoint) => {
     setActivePoint(p); setActiveProject(undefined); setActiveSegment(undefined);
@@ -101,6 +144,26 @@ function App() {
   };
   const selectSegment = (s: RailSegment) => {
     setActiveSegment(s); setActivePoint(undefined); setActiveProject(undefined);
+  };
+
+  // ── Sync indicator ─────────────────────────────────────────────────────────
+
+  const SyncBadge = () => {
+    if (!sheetsEnabled) return null;
+    const map: Record<SyncStatus, { icon: React.ReactNode; cls: string; title: string }> = {
+      idle:    { icon: <Cloud size={14} />,                               cls: 'text-gray-400',  title: 'Sheets: מחובר' },
+      loading: { icon: <Loader2 size={14} className="animate-spin" />,    cls: 'text-blue-400',  title: 'מסנכרן…' },
+      ok:      { icon: <Cloud size={14} />,                               cls: 'text-green-500', title: 'Sheets: מסונכרן' },
+      error:   { icon: <CloudOff size={14} />,                            cls: 'text-red-400',   title: 'שגיאת סנכרון Sheets' },
+    };
+    const { icon, cls, title } = map[syncStatus];
+    return (
+      <button onClick={fetchFromSheets} title={title}
+        className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-colors ${cls} hover:bg-gray-100`}>
+        {icon}
+        <span className="hidden sm:inline">Sheets</span>
+      </button>
+    );
   };
 
   return (
@@ -120,6 +183,7 @@ function App() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <SyncBadge />
             <button onClick={() => setShowAddStation(true)}
               className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium">
               <Plus className="w-4 h-4" /> הוסף תחנה
