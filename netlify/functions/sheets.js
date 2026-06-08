@@ -8,6 +8,7 @@
 
 const API_BASE   = 'https://sheets-connector.vercel.app';
 const PROJECT_ID = '8a1144db-1cbf-4141-90b2-85021a633ed5';
+const API_KEY    = 'GVll2aBExGBw-1ETHG23DhtVWKmJu0Ge';
 
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
@@ -19,15 +20,6 @@ exports.handler = async (event) => {
   // Handle CORS preflight
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: CORS, body: '' };
-  }
-
-  const API_KEY = process.env.VITE_API_KEY;
-  if (!API_KEY) {
-    return {
-      statusCode: 500,
-      headers: { ...CORS, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'VITE_API_KEY not configured on Netlify' }),
-    };
   }
 
   // Parse query params — extract table and id, forward the rest

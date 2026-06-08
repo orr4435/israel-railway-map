@@ -3,14 +3,13 @@ import { Project, StoryPoint, ProjectType, GeoGeometry } from '../types';
 // ── Config ────────────────────────────────────────────────────────────────────
 const PROJ_TABLE = 'RAIL1';
 const STN_TABLE  = import.meta.env.VITE_STATIONS_TABLE as string | undefined;
-const API_KEY    = import.meta.env.VITE_API_KEY as string | undefined;
 
-// All API calls go through the Netlify Function proxy (avoids CORS entirely).
-// In production: /.netlify/functions/sheets  (Netlify runs it server-side)
-// In dev:        Vite proxy rewrites the same path to upstream + injects api key
+// All calls go through the Netlify Function proxy — no CORS, API key stays server-side.
+// Dev: Vite rewrites this path to the upstream and injects the key.
+// Prod: Netlify Function handles it.
 const PROXY = '/.netlify/functions/sheets';
 
-// Fallback: published CSV for read-only when no API key is configured
+// CSV fallback for stations (read-only, no API needed)
 const CSV_BASE = (() => {
   const raw = (import.meta.env.VITE_SHEETS_CSV_URL as string | undefined)
     ?? 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT1gPbkvJTIY6ZztmORgUxGiE17fYrVH30X7LsW57ELt7jIrXFbFyjkzBDRxNHPiLWUWPq1tKSLJHJK/pub';
@@ -18,7 +17,7 @@ const CSV_BASE = (() => {
 })();
 
 export const sheetsEnabled = true;
-export const canWrite      = !!API_KEY;
+export const canWrite      = true; // proxy always has the key
 
 // ── Proxy helpers ─────────────────────────────────────────────────────────────
 
@@ -199,19 +198,20 @@ export function stationToRow(s: StoryPoint): Record<string, string> {
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export async function loadProjects(): Promise<Project[]> {
-  if (API_KEY) {
+  try {
     const rows = await apiList(PROJ_TABLE);
     return rows.filter(r => str(r.title)).map(rowToProject);
+  } catch {
+    return csvLoadProjects(); // fallback to CSV if proxy fails
   }
-  return csvLoadProjects();
 }
 
 export async function loadCustomStations(): Promise<StoryPoint[]> {
-  if (API_KEY && STN_TABLE) {
+  if (STN_TABLE) {
     try {
       const rows = await apiList(STN_TABLE);
       return rows.filter(r => str(r.title)).map(rowToStation);
-    } catch { return []; }
+    } catch { /* fall through to CSV */ }
   }
   try {
     const res = await fetch(`${CSV_BASE}?output=csv&sheet=stations`);

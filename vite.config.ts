@@ -3,10 +3,9 @@ import react from '@vitejs/plugin-react';
 
 const API_BASE   = 'https://sheets-connector.vercel.app';
 const PROJECT_ID = '8a1144db-1cbf-4141-90b2-85021a633ed5';
+const API_KEY    = 'GVll2aBExGBw-1ETHG23DhtVWKmJu0Ge';
 
-export default defineConfig(({ mode }) => {
-  const env    = loadEnv(mode, process.cwd(), '');
-  const apiKey = env.VITE_API_KEY ?? '';
+export default defineConfig(() => {
 
   return {
     plugins: [react()],
@@ -32,7 +31,7 @@ export default defineConfig(({ mode }) => {
           },
           configure(proxy) {
             proxy.on('proxyReq', (req) => {
-              req.setHeader('x-api-key', apiKey);
+              req.setHeader('x-api-key', API_KEY);
             });
           },
         },
