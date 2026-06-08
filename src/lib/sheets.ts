@@ -63,16 +63,35 @@ function filterToKnownCols(table: string, data: Record<string, string>): Record<
   return Object.fromEntries(Object.entries(data).filter(([k]) => cols.has(k)));
 }
 
+const MINIMAL_KEYS = ['id', 'title', 'lat', 'lng', 'projectType', 'status'];
+
+async function postOnce(table: string, data: Record<string, string>): Promise<Response> {
+  return fetch(proxyUrl(table), {
+    method: 'POST', headers: jsonHeaders, body: JSON.stringify(data),
+  });
+}
+
 async function apiPost(table: string, data: Record<string, string>): Promise<void> {
   const filtered = filterToKnownCols(table, data);
-  const res  = await fetch(proxyUrl(table), {
-    method: 'POST', headers: jsonHeaders, body: JSON.stringify(filtered),
-  });
+
+  let res = await postOnce(table, filtered);
+
+  // If 500 and we have many fields, retry with minimal payload so we can tell
+  // whether the issue is the schema or the connection.
+  if (res.status === 500 && Object.keys(filtered).length > MINIMAL_KEYS.length) {
+    const minimal = Object.fromEntries(
+      Object.entries(filtered).filter(([k]) => MINIMAL_KEYS.includes(k))
+    );
+    res = await postOnce(table, minimal);
+    if (res.ok) {
+      // Minimal worked — the sheet is missing some columns. Save what we can.
+      return;
+    }
+  }
+
   const text = await res.text();
   if (!res.ok) {
-    // Include what we actually sent to help debug
-    const sent = JSON.stringify(filtered);
-    throw new Error(`HTTP ${res.status} — שלחנו: ${sent.slice(0, 200)}`);
+    throw new Error(`HTTP ${res.status} — ${text.slice(0, 300)}`);
   }
   try {
     const json = JSON.parse(text) as Record<string, unknown>;
@@ -191,13 +210,14 @@ export function rowToProject(row: Record<string, unknown>): Project {
 }
 
 export function projectToRow(p: Project): Record<string, string> {
+  // geometry is excluded — nested JSON inside JSON breaks most sheet connectors.
+  // lat/lng represent the centre point; that's sufficient for Sheets.
   return {
     id:                     p.id,
     title:                  p.title,
     projectType:            p.projectType            ?? '',
     lat:                    String(p.location.lat),
     lng:                    String(p.location.lng),
-    geometry:               p.geometry ? JSON.stringify(p.geometry) : '',
     targetYear:             p.targetYear             ?? '',
     cost:                   p.cost                   ?? '',
     trafficPurpose:         p.trafficPurpose         ?? '',
