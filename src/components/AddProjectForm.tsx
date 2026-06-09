@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Project, PROJECT_TYPES, ProjectType, GeoGeometry, locationFromGeometry } from '../types';
-import { X, Image as ImageIcon } from 'lucide-react';
+import { X, Image as ImageIcon, AlertTriangle } from 'lucide-react';
 import { GeoPickerMap } from './GeoPickerMap';
+import { toDirectImageUrl, isUnsupportedImageUrl } from '../lib/image';
 
 interface AddProjectFormProps {
   onSubmit: (project: Omit<Project, 'id'>) => void;
@@ -221,9 +222,15 @@ export function AddProjectForm({ onSubmit, onClose }: AddProjectFormProps) {
             <input type="url" value={image} onChange={e => setImage(e.target.value)}
               placeholder="https://example.com/image.jpg"
               className={inputCls()} />
-            {image && (
+            {isUnsupportedImageUrl(image) && (
+              <div className="mt-2 flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">
+                <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+                <span>קישור Google Photos לא נתמך כתמונה ישירה. השתמש ב-Google Drive (שיתוף → כל מי שיש לו קישור) או בקישור ישיר לקובץ ‎.jpg/.png.</span>
+              </div>
+            )}
+            {image && !isUnsupportedImageUrl(image) && (
               <div className="mt-2 rounded-lg overflow-hidden border border-gray-100 h-32">
-                <img src={image} alt="תצוגה מקדימה" className="w-full h-full object-cover"
+                <img src={toDirectImageUrl(image)} alt="תצוגה מקדימה" className="w-full h-full object-cover"
                   onError={e => { (e.currentTarget.parentElement as HTMLElement).style.display = 'none'; }} />
               </div>
             )}

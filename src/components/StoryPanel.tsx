@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { StoryPoint, Project, RailSegment, getStatusStyle, getSegmentStyle, PROJECT_TYPES } from '../types';
 import { ExternalLink, MapPin, FileText, LayoutDashboard, Calendar, DollarSign, Train, ChevronRight, ChevronLeft, Clock, Wrench, Building2 } from 'lucide-react';
 import { Dashboard } from './Dashboard';
+import { toDirectImageUrl } from '../lib/image';
 
 interface Props {
   points: StoryPoint[];         activePoint?: StoryPoint;    onPointSelect: (p: StoryPoint) => void;
@@ -113,7 +114,8 @@ export function StoryPanel({ points, activePoint, onPointSelect, projects, activ
                   className={`mb-2 rounded-xl cursor-pointer transition-all duration-200 border-2 overflow-hidden ${act ? 'shadow-sm' : 'border-transparent bg-gray-50 hover:bg-gray-100'}`}
                   style={act ? { borderColor: st.color, background: st.color + '11' } : {}}>
                   {point.image && (
-                    <img src={point.image} alt={point.title} className={`w-full object-cover ${isExpanded ? 'h-48' : 'h-32'}`} />
+                    <img src={toDirectImageUrl(point.image)} alt={point.title} className={`w-full object-cover ${isExpanded ? 'h-48' : 'h-32'}`}
+                      onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
                   )}
                   <div className="p-3 h-[60px] flex flex-col justify-center">
                     <div className="flex items-center justify-between gap-2">
@@ -190,81 +192,93 @@ export function StoryPanel({ points, activePoint, onPointSelect, projects, activ
               const act      = activeProject?.id === project.id;
               const typeInfo = PROJECT_TYPES.find(t => t.type === project.projectType);
               const typeClr  = typeInfo?.color ?? '#16a34a';
+              const isTraffic = project.projectType === 'הסדרי_תנועה';
+              const cardH    = isTraffic ? 'h-[96px]' : 'h-[86px]';
               return (
                 <div key={project.id} onClick={() => onProjectSelect(project)}
                   className={`mb-2 rounded-xl cursor-pointer transition-all duration-200 border-2 overflow-hidden ${act ? 'shadow-sm' : 'border-transparent bg-gray-50 hover:bg-gray-100'}`}
                   style={act ? { borderColor: typeClr, background: typeClr + '11' } : {}}>
-                  {project.image && (
-                    <img src={project.image} alt={project.title} className={`w-full object-cover ${isExpanded ? 'h-48' : 'h-32'}`} />
-                  )}
-                  {project.projectType === 'הסדרי_תנועה' ? (
-                    /* ── Traffic card ── */
-                    <div className="p-3 h-[96px] flex flex-col justify-between">
-                      <div className="flex items-start justify-between gap-2">
-                        <h3 className="font-bold text-gray-800 text-sm line-clamp-1">{project.title}</h3>
-                        <span className="shrink-0 text-[10px] font-bold rounded-full px-2 py-0.5"
-                          style={{ background: typeClr + '22', color: typeClr }}>
-                          {typeInfo?.icon} {typeInfo?.label}
-                        </span>
-                      </div>
-                      {project.trafficPurpose && (
-                        <div className="text-xs text-gray-600 line-clamp-1">
-                          <span className="text-gray-400">מטרה: </span>{project.trafficPurpose}
+
+                  <div className="flex">
+                    {/* ── Thumbnail ── */}
+                    {project.image && (
+                      <img
+                        src={toDirectImageUrl(project.image)}
+                        alt={project.title}
+                        className={`shrink-0 object-cover ${isExpanded ? 'w-28' : 'w-20'} ${cardH}`}
+                        onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                      />
+                    )}
+
+                    {isTraffic ? (
+                      /* ── Traffic card ── */
+                      <div className={`p-3 ${cardH} flex-1 min-w-0 flex flex-col justify-between`}>
+                        <div className="flex items-start justify-between gap-2">
+                          <h3 className="font-bold text-gray-800 text-sm line-clamp-1">{project.title}</h3>
+                          <span className="shrink-0 text-[10px] font-bold rounded-full px-2 py-0.5"
+                            style={{ background: typeClr + '22', color: typeClr }}>
+                            {typeInfo?.icon} {typeInfo?.label}
+                          </span>
                         </div>
-                      )}
-                      <div className="flex items-center gap-3 text-xs text-gray-500 flex-wrap">
-                        {project.trafficClosureDate && (
-                          <span className="flex items-center gap-1">
-                            <Calendar size={10} className="text-red-400" />{project.trafficClosureDate}
-                          </span>
+                        {project.trafficPurpose && (
+                          <div className="text-xs text-gray-600 line-clamp-1">
+                            <span className="text-gray-400">מטרה: </span>{project.trafficPurpose}
+                          </div>
                         )}
-                        {project.trafficClosureDuration && (
-                          <span className="flex items-center gap-1">
-                            <Clock size={10} className="text-red-400" />{project.trafficClosureDuration}
-                          </span>
-                        )}
-                        {project.contractor && (
-                          <span className="flex items-center gap-1">
-                            <Wrench size={10} className="text-gray-400" />{project.contractor}
-                          </span>
-                        )}
-                        {project.managementCompany && (
-                          <span className="flex items-center gap-1">
-                            <Building2 size={10} className="text-gray-400" />{project.managementCompany}
-                          </span>
-                        )}
+                        <div className="flex items-center gap-3 text-xs text-gray-500 flex-wrap">
+                          {project.trafficClosureDate && (
+                            <span className="flex items-center gap-1">
+                              <Calendar size={10} className="text-red-400" />{project.trafficClosureDate}
+                            </span>
+                          )}
+                          {project.trafficClosureDuration && (
+                            <span className="flex items-center gap-1">
+                              <Clock size={10} className="text-red-400" />{project.trafficClosureDuration}
+                            </span>
+                          )}
+                          {project.contractor && (
+                            <span className="flex items-center gap-1">
+                              <Wrench size={10} className="text-gray-400" />{project.contractor}
+                            </span>
+                          )}
+                          {project.managementCompany && (
+                            <span className="flex items-center gap-1">
+                              <Building2 size={10} className="text-gray-400" />{project.managementCompany}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ) : (
-                    /* ── Regular project card ── */
-                    <div className="p-3 h-[86px] flex flex-col justify-between">
-                      <div className="flex items-start justify-between gap-2">
-                        <h3 className="font-bold text-gray-800 text-sm line-clamp-1">{project.title}</h3>
-                        <span className="shrink-0 text-[10px] font-bold rounded-full px-2 py-0.5"
-                          style={{ background: typeClr + '22', color: typeClr }}>
-                          {project.targetYear}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs">
-                        {typeInfo && (
-                          <span className="flex items-center gap-1 font-medium" style={{ color: typeClr }}>
-                            {typeInfo.icon} {typeInfo.label}
+                    ) : (
+                      /* ── Regular project card ── */
+                      <div className={`p-3 ${cardH} flex-1 min-w-0 flex flex-col justify-between`}>
+                        <div className="flex items-start justify-between gap-2">
+                          <h3 className="font-bold text-gray-800 text-sm line-clamp-1">{project.title}</h3>
+                          <span className="shrink-0 text-[10px] font-bold rounded-full px-2 py-0.5"
+                            style={{ background: typeClr + '22', color: typeClr }}>
+                            {project.targetYear}
                           </span>
-                        )}
-                        {project.cost && (
-                          <span className="flex items-center gap-1 text-gray-500">
-                            <DollarSign size={10} className="text-gray-400" />{project.cost}
-                          </span>
-                        )}
+                        </div>
+                        <div className="flex items-center gap-2 text-xs">
+                          {typeInfo && (
+                            <span className="flex items-center gap-1 font-medium" style={{ color: typeClr }}>
+                              {typeInfo.icon} {typeInfo.label}
+                            </span>
+                          )}
+                          {project.cost && (
+                            <span className="flex items-center gap-1 text-gray-500">
+                              <DollarSign size={10} className="text-gray-400" />{project.cost}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-gray-400">
+                          {project.notes
+                            ? <span className="line-clamp-1">{project.notes}</span>
+                            : <span className="flex items-center gap-1"><Calendar size={10} />שנת יעד: {project.targetYear}</span>
+                          }
+                        </div>
                       </div>
-                      <div className="text-xs text-gray-400">
-                        {project.notes
-                          ? <span className="line-clamp-1">{project.notes}</span>
-                          : <span className="flex items-center gap-1"><Calendar size={10} />שנת יעד: {project.targetYear}</span>
-                        }
-                      </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               );
             })}

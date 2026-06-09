@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, GeoJSON as LeafletGeoJSON } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { StoryPoint, Project, RailSegment, getStatusStyle, getSegmentStyle, STATUS_COLORS, SEGMENT_STATUS_COLORS, PROJECT_TYPES } from '../types';
+import { toDirectImageUrl } from '../lib/image';
 import L from 'leaflet';
 import proj4 from 'proj4';
 
@@ -405,6 +406,12 @@ export function Map({ points, activePoint, onMarkerClick, projects, activeProjec
                   {typeInfo?.icon ?? ''} {typeLbl}
                 </span>
                 <strong style={{ display:'block', color:'#166534', marginTop:2, fontSize:14 }}>{project.title}</strong>
+
+                {project.image && (
+                  <img src={toDirectImageUrl(project.image)} alt={project.title}
+                    style={{ width:'100%', height:110, objectFit:'cover', borderRadius:8, marginTop:6 }}
+                    onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+                )}
 
                 {project.projectType === 'הסדרי_תנועה' ? (
                   <table style={{ fontSize:12, color:'#555', marginTop:6, width:'100%', borderCollapse:'collapse' }}>

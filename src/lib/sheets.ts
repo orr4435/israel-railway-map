@@ -58,7 +58,9 @@ function parseCSV(text: string): Record<string, string>[] {
 }
 
 async function csvFetch(url: string): Promise<Record<string, string>[]> {
-  const res = await fetch(url);
+  // cache-bust: published CSV + browser cache otherwise serves stale data
+  const bust = `${url}${url.includes('?') ? '&' : '?'}_t=${Date.now()}`;
+  const res = await fetch(bust, { cache: 'no-store' });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return parseCSV(await res.text());
 }
