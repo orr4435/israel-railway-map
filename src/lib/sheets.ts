@@ -1,11 +1,10 @@
 import { Project, StoryPoint, ProjectType, GeoGeometry } from '../types';
 
-// ── Config ────────────────────────────────────────────────────────────────────
-const PROJ_TABLE = 'RAIL1';
-const STN_TABLE  = import.meta.env.VITE_STATIONS_TABLE as string | undefined;
+// ── Google Apps Script URL (Web App, Execute as: Me, Anyone) ─────────────────
+// POST uses Content-Type: text/plain → no CORS preflight → works directly from browser
+const GAS_URL = ''; // ← הדבק כאן את ה-URL של ה-Web App אחרי פריסה
 
-const PROXY  = '/.netlify/functions/sheets';
-
+// ── Published CSV (read-only, no auth) ───────────────────────────────────────
 const CSV_BASE = (() => {
   const raw = (import.meta.env.VITE_SHEETS_CSV_URL as string | undefined)
     ?? 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT1gPbkvJTIY6ZztmORgUxGiE17fYrVH30X7LsW57ELt7jIrXFbFyjkzBDRxNHPiLWUWPq1tKSLJHJK/pub';
@@ -13,145 +12,35 @@ const CSV_BASE = (() => {
 })();
 
 export const sheetsEnabled = true;
-export const canWrite      = true;
+export const canWrite      = !!GAS_URL;
 
-// ── Proxy helpers ─────────────────────────────────────────────────────────────
+// ── GAS write (text/plain avoids CORS preflight) ──────────────────────────────
 
-function proxyUrl(table: string, id?: string, extra?: Record<string, string>): string {
-  const p = new URLSearchParams({ table, ...extra });
-  if (id) p.set('id', id);
-  return `${PROXY}?${p}`;
-}
-
-const jsonHeaders = { 'Content-Type': 'application/json' };
-
-function extractRows(json: unknown): Record<string, unknown>[] {
-  if (Array.isArray(json)) return json as Record<string, unknown>[];
-  const j = json as Record<string, unknown>;
-  const c = j['data'] ?? j['records'] ?? j['rows'] ?? j['items'] ?? [];
-  return Array.isArray(c) ? c as Record<string, unknown>[] : [];
-}
-
-// ── Schema cache (populated on first GET) ─────────────────────────────────────
-// Maps table name → set of known column names
-const knownCols: Map<string, Set<string>> = new Map();
-
-async function apiList(table: string): Promise<Record<string, unknown>[]> {
-  const limit = 100;
-  let offset  = 0;
-  const all: Record<string, unknown>[] = [];
-  while (true) {
-    const res = await fetch(proxyUrl(table, undefined, { limit: String(limit), offset: String(offset) }));
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const batch = extractRows(await res.json());
-    // Learn column names from first batch that has rows
-    if (batch.length > 0 && !knownCols.has(table)) {
-      knownCols.set(table, new Set(Object.keys(batch[0])));
-    }
-    all.push(...batch);
-    if (batch.length < limit) break;
-    offset += limit;
-  }
-  return all;
-}
-
-// Filter payload to only include columns that exist in the sheet.
-// If schema is unknown, send everything (first POST teaches us).
-function filterToKnownCols(table: string, data: Record<string, string>): Record<string, string> {
-  const cols = knownCols.get(table);
-  if (!cols || cols.size === 0) return data;
-  return Object.fromEntries(Object.entries(data).filter(([k]) => cols.has(k)));
-}
-
-const MINIMAL_KEYS = ['id', 'title', 'lat', 'lng', 'projectType', 'status'];
-
-async function postOnce(table: string, data: Record<string, string>): Promise<Response> {
-  return fetch(proxyUrl(table), {
-    method: 'POST', headers: jsonHeaders, body: JSON.stringify(data),
-  });
-}
-
-async function apiPost(table: string, data: Record<string, string>): Promise<void> {
-  const filtered = filterToKnownCols(table, data);
-
-  let res = await postOnce(table, filtered);
-
-  // If 500 and we have many fields, retry with minimal payload so we can tell
-  // whether the issue is the schema or the connection.
-  if (res.status === 500 && Object.keys(filtered).length > MINIMAL_KEYS.length) {
-    const minimal = Object.fromEntries(
-      Object.entries(filtered).filter(([k]) => MINIMAL_KEYS.includes(k))
-    );
-    res = await postOnce(table, minimal);
-    if (res.ok) {
-      // Minimal worked — the sheet is missing some columns. Save what we can.
-      return;
-    }
-  }
-
-  const text = await res.text();
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status} — ${text.slice(0, 300)}`);
-  }
-  try {
-    const json = JSON.parse(text) as Record<string, unknown>;
-    if (json.error) throw new Error(String(json.error));
-  } catch (e) {
-    if (e instanceof SyntaxError) return;
-    throw e;
-  }
-}
-
-async function apiPatch(table: string, id: string, data: Partial<Record<string, string>>): Promise<void> {
-  const res = await fetch(proxyUrl(table, id), {
-    method: 'PATCH', headers: jsonHeaders, body: JSON.stringify(data),
+async function gasPost(body: object): Promise<void> {
+  if (!GAS_URL) throw new Error('GAS_URL לא מוגדר');
+  const res = await fetch(GAS_URL, {
+    method:  'POST',
+    // text/plain = "simple request" → no preflight OPTIONS needed
+    headers: { 'Content-Type': 'text/plain' },
+    body:    JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const json = await res.json() as Record<string, unknown>;
+  if (json.error) throw new Error(String(json.error));
 }
 
-async function apiDelete(table: string, id: string): Promise<void> {
-  const res = await fetch(proxyUrl(table, id), { method: 'DELETE' });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-}
-
-// ── Diagnostic ────────────────────────────────────────────────────────────────
-
-export interface SheetsDiag {
-  ok: boolean;
-  columns: string[];
-  rowCount: number;
-  rawStatus: number;
-  error?: string;
-}
-
-export async function diagnoseSheets(): Promise<SheetsDiag> {
-  try {
-    const res   = await fetch(proxyUrl(PROJ_TABLE, undefined, { limit: '5', offset: '0' }));
-    const text  = await res.text();
-    if (!res.ok) return { ok: false, columns: [], rowCount: 0, rawStatus: res.status, error: text };
-    const json  = JSON.parse(text);
-    const rows  = extractRows(json);
-    const cols  = rows.length > 0 ? Object.keys(rows[0]) : [];
-    return { ok: true, columns: cols, rowCount: rows.length, rawStatus: res.status };
-  } catch (e) {
-    return { ok: false, columns: [], rowCount: 0, rawStatus: 0, error: String(e) };
-  }
-}
-
-// ── CSV fallback ──────────────────────────────────────────────────────────────
+// ── CSV helpers ───────────────────────────────────────────────────────────────
 
 function parseCSVLine(line: string): string[] {
   const result: string[] = [];
-  let current = '', inQuotes = false;
+  let cur = '', inQ = false;
   for (let i = 0; i < line.length; i++) {
     const c = line[i];
-    if (c === '"') {
-      if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
-      else inQuotes = !inQuotes;
-    } else if (c === ',' && !inQuotes) { result.push(current); current = ''; }
-    else current += c;
+    if (c === '"') { if (inQ && line[i+1] === '"') { cur += '"'; i++; } else inQ = !inQ; }
+    else if (c === ',' && !inQ) { result.push(cur); cur = ''; }
+    else cur += c;
   }
-  result.push(current);
+  result.push(cur);
   return result;
 }
 
@@ -159,29 +48,19 @@ function parseCSV(text: string): Record<string, string>[] {
   const lines = text.replace(/^﻿/, '').split(/\r?\n/).filter(l => l.trim());
   if (lines.length < 2) return [];
   const headers = parseCSVLine(lines[0]).map(h => h.trim());
-  return lines.slice(1).map((line, idx) => {
+  return lines.slice(1).map((line, i) => {
     const vals = parseCSVLine(line);
     const row: Record<string, string> = {};
-    headers.forEach((h, i) => { row[h] = (vals[i] ?? '').trim(); });
-    if (!row.id) row.id = `sheet-${idx + 1}`;
+    headers.forEach((h, j) => { row[h] = (vals[j] ?? '').trim(); });
+    if (!row.id) row.id = `row-${i + 1}`;
     return row;
   });
 }
 
-async function csvLoadProjects(): Promise<Project[]> {
-  for (const url of [
-    `${CSV_BASE}?output=csv&sheet=${PROJ_TABLE}`,
-    `${CSV_BASE}?output=csv&sheet=projects`,
-    `${CSV_BASE}?output=csv`,
-  ]) {
-    try {
-      const res = await fetch(url);
-      if (!res.ok) continue;
-      const rows = parseCSV(await res.text()).filter(r => r.title?.trim());
-      if (rows.length > 0) return rows.map(r => rowToProject(r as Record<string, string>));
-    } catch { /* try next */ }
-  }
-  return [];
+async function csvFetch(url: string): Promise<Record<string, string>[]> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return parseCSV(await res.text());
 }
 
 // ── Row converters ────────────────────────────────────────────────────────────
@@ -210,8 +89,6 @@ export function rowToProject(row: Record<string, unknown>): Project {
 }
 
 export function projectToRow(p: Project): Record<string, string> {
-  // geometry is excluded — nested JSON inside JSON breaks most sheet connectors.
-  // lat/lng represent the centre point; that's sufficient for Sheets.
   return {
     id:                     p.id,
     title:                  p.title,
@@ -254,7 +131,6 @@ export function stationToRow(s: StoryPoint): Record<string, string> {
     status:      s.status,
     lat:         String(s.location.lat),
     lng:         String(s.location.lng),
-    geometry:    s.geometry ? JSON.stringify(s.geometry) : '',
     image:       s.image      ?? '',
     linkUrl:     s.link?.url  ?? '',
     linkLabel:   s.link?.label ?? '',
@@ -265,46 +141,52 @@ export function stationToRow(s: StoryPoint): Record<string, string> {
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export async function loadProjects(): Promise<Project[]> {
-  try {
-    const rows = await apiList(PROJ_TABLE);
-    return rows.filter(r => str(r.title)).map(rowToProject);
-  } catch {
-    return csvLoadProjects();
+  for (const url of [
+    `${CSV_BASE}?output=csv&sheet=projects`,
+    `${CSV_BASE}?output=csv`,
+  ]) {
+    try {
+      const rows = (await csvFetch(url)).filter(r => r.title?.trim());
+      if (rows.length > 0) return rows.map(rowToProject);
+    } catch { /* try next */ }
   }
+  return [];
 }
 
 export async function loadCustomStations(): Promise<StoryPoint[]> {
-  if (STN_TABLE) {
-    try {
-      const rows = await apiList(STN_TABLE);
-      return rows.filter(r => str(r.title)).map(rowToStation);
-    } catch { /* fall through */ }
-  }
   try {
-    const res = await fetch(`${CSV_BASE}?output=csv&sheet=stations`);
-    if (!res.ok) return [];
-    return parseCSV(await res.text()).filter(r => r.title?.trim()).map(r => rowToStation(r));
+    const rows = await csvFetch(`${CSV_BASE}?output=csv&sheet=stations`);
+    return rows.filter(r => r.title?.trim()).map(rowToStation);
   } catch { return []; }
 }
 
 export async function saveProject(project: Project): Promise<void> {
-  await apiPost(PROJ_TABLE, projectToRow(project));
+  await gasPost({ action: 'add', sheet: 'projects', data: projectToRow(project) });
 }
 
 export async function updateProject(project: Project): Promise<void> {
-  await apiPatch(PROJ_TABLE, project.id, projectToRow(project));
+  await gasPost({ action: 'update', sheet: 'projects', id: project.id, data: projectToRow(project) });
 }
 
 export async function deleteProject(id: string): Promise<void> {
-  await apiDelete(PROJ_TABLE, id);
+  await gasPost({ action: 'delete', sheet: 'projects', id });
 }
 
 export async function saveStation(station: StoryPoint): Promise<void> {
-  if (!STN_TABLE) return;
-  await apiPost(STN_TABLE, stationToRow(station));
+  await gasPost({ action: 'add', sheet: 'stations', data: stationToRow(station) });
 }
 
 export async function deleteStation(id: string): Promise<void> {
-  if (!STN_TABLE) return;
-  await apiDelete(STN_TABLE, id);
+  await gasPost({ action: 'delete', sheet: 'stations', id });
+}
+
+// Diagnostic: checks if CSV read works
+export interface SheetsDiag { ok: boolean; columns: string[]; rowCount: number; error?: string }
+export async function diagnoseSheets(): Promise<SheetsDiag> {
+  try {
+    const rows = await csvFetch(`${CSV_BASE}?output=csv&sheet=projects`);
+    return { ok: true, columns: rows[0] ? Object.keys(rows[0]) : [], rowCount: rows.length };
+  } catch (e) {
+    return { ok: false, columns: [], rowCount: 0, error: String(e) };
+  }
 }
