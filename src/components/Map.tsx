@@ -33,9 +33,15 @@ L.Icon.Default.mergeOptions({
   shadowUrl:     'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
-function makeCircleIcon(color: string, size: number) {
+// Pulsing halo behind an active marker
+function pulseRing(color: string, size: number): string {
+  return `<span class="marker-pulse-ring" style="width:${size * 1.6}px;height:${size * 1.6}px;background:${color}"></span>`;
+}
+
+function makeCircleIcon(color: string, size: number, pulse = false) {
+  const ring = pulse ? pulseRing(color, size) : '';
   return L.divIcon({
-    html: `<div style="width:${size}px;height:${size}px;background:${color};border:2.5px solid white;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.35)"></div>`,
+    html: `<div style="position:relative;width:${size}px;height:${size}px">${ring}<div style="position:relative;width:${size}px;height:${size}px;background:${color};border:2.5px solid white;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.35)"></div></div>`,
     className: '', iconSize: [size, size], iconAnchor: [size / 2, size / 2], popupAnchor: [0, -size / 2 - 4],
   });
 }
@@ -48,10 +54,12 @@ function makeProjectIcon(projectType: string | undefined, isActive: boolean): L.
   const color = projectTypeColor(projectType);
   const size  = isActive ? 20 : 14;
 
+  const ring = isActive ? pulseRing(color, size) : '';
+
   if (projectType === 'הסדרי_תנועה') {
     // diamond shape for traffic arrangements
     return L.divIcon({
-      html: `<div style="width:${size}px;height:${size}px;background:${color};border:2.5px solid white;transform:rotate(45deg);box-shadow:0 1px 4px rgba(0,0,0,0.35)"></div>`,
+      html: `<div style="position:relative;width:${size}px;height:${size}px">${ring}<div style="position:relative;width:${size}px;height:${size}px;background:${color};border:2.5px solid white;transform:rotate(45deg);box-shadow:0 1px 4px rgba(0,0,0,0.35)"></div></div>`,
       className: '', iconSize: [size, size], iconAnchor: [size / 2, size / 2], popupAnchor: [0, -size / 2 - 4],
     });
   }
@@ -60,12 +68,12 @@ function makeProjectIcon(projectType: string | undefined, isActive: boolean): L.
     // triangle for rail construction
     const h = Math.round(size * 0.87);
     return L.divIcon({
-      html: `<div style="width:0;height:0;border-left:${size / 2}px solid transparent;border-right:${size / 2}px solid transparent;border-bottom:${h}px solid ${color};filter:drop-shadow(0 1px 2px rgba(0,0,0,0.3))"></div>`,
+      html: `<div style="position:relative;width:${size}px;height:${h}px;display:flex;align-items:center;justify-content:center">${ring}<div style="position:relative;width:0;height:0;border-left:${size / 2}px solid transparent;border-right:${size / 2}px solid transparent;border-bottom:${h}px solid ${color};filter:drop-shadow(0 1px 2px rgba(0,0,0,0.3))"></div></div>`,
       className: '', iconSize: [size, h], iconAnchor: [size / 2, h / 2], popupAnchor: [0, -h / 2 - 4],
     });
   }
 
-  return makeCircleIcon(color, size);
+  return makeCircleIcon(color, size, isActive);
 }
 
 // ── Fly-to ────────────────────────────────────────────────────────────────────
@@ -359,7 +367,7 @@ export function Map({ points, activePoint, onMarkerClick, projects, activeProjec
         const active = activePoint?.id === point.id;
         return (
           <Marker key={point.id} position={[point.location.lat, point.location.lng]}
-            icon={makeCircleIcon(st.color, active ? 18 : 12)}
+            icon={makeCircleIcon(st.color, active ? 18 : 12, active)}
             eventHandlers={{ click: () => onMarkerClick(point) }}>
             <Popup>
               <div dir="rtl">

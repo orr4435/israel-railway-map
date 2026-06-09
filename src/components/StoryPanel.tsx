@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { StoryPoint, Project, RailSegment, getStatusStyle, getSegmentStyle, PROJECT_TYPES } from '../types';
-import { ExternalLink, MapPin, FileText, LayoutDashboard, Calendar, DollarSign, Train, ChevronRight, ChevronLeft, Clock, Wrench, Building2 } from 'lucide-react';
+import { ExternalLink, MapPin, FileText, LayoutDashboard, Calendar, DollarSign, Train, ChevronRight, ChevronLeft, Clock, Wrench, Building2, Maximize2, X } from 'lucide-react';
 import { Dashboard } from './Dashboard';
 import { toDirectImageUrl } from '../lib/image';
 
@@ -47,6 +47,7 @@ export function StoryPanel({ points, activePoint, onPointSelect, projects, activ
   const [railPage, setRailPage] = useState(1);
   const [projPage, setProjPage] = useState(1);
   const [stnPage,  setStnPage]  = useState(1);
+  const [lightbox, setLightbox] = useState<{ src: string; title: string } | null>(null);
 
   const switchTab = (t: Tab) => {
     setTab(t);
@@ -114,8 +115,15 @@ export function StoryPanel({ points, activePoint, onPointSelect, projects, activ
                   className={`mb-2 rounded-xl cursor-pointer transition-all duration-200 border-2 overflow-hidden ${act ? 'shadow-sm' : 'border-transparent bg-gray-50 hover:bg-gray-100'}`}
                   style={act ? { borderColor: st.color, background: st.color + '11' } : {}}>
                   {point.image && (
-                    <img src={toDirectImageUrl(point.image)} alt={point.title} className={`w-full object-cover ${isExpanded ? 'h-48' : 'h-32'}`}
-                      onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+                    <button type="button"
+                      onClick={e => { e.stopPropagation(); setLightbox({ src: toDirectImageUrl(point.image!), title: point.title }); }}
+                      className={`relative w-full group block ${isExpanded ? 'h-48' : 'h-32'}`} title="הגדל תמונה">
+                      <img src={toDirectImageUrl(point.image)} alt={point.title} className="w-full h-full object-cover"
+                        onError={e => { (e.currentTarget.parentElement as HTMLElement).style.display = 'none'; }} />
+                      <span className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/25 transition-colors">
+                        <Maximize2 size={18} className="text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow" />
+                      </span>
+                    </button>
                   )}
                   <div className="p-3 h-[60px] flex flex-col justify-center">
                     <div className="flex items-center justify-between gap-2">
@@ -200,14 +208,23 @@ export function StoryPanel({ points, activePoint, onPointSelect, projects, activ
                   style={act ? { borderColor: typeClr, background: typeClr + '11' } : {}}>
 
                   <div className="flex">
-                    {/* ── Thumbnail ── */}
+                    {/* ── Thumbnail (click to enlarge) ── */}
                     {project.image && (
-                      <img
-                        src={toDirectImageUrl(project.image)}
-                        alt={project.title}
-                        className={`shrink-0 object-cover ${isExpanded ? 'w-28' : 'w-20'} ${cardH}`}
-                        onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-                      />
+                      <button
+                        type="button"
+                        onClick={e => { e.stopPropagation(); setLightbox({ src: toDirectImageUrl(project.image!), title: project.title }); }}
+                        className={`relative shrink-0 group ${isExpanded ? 'w-28' : 'w-20'} ${cardH}`}
+                        title="הגדל תמונה">
+                        <img
+                          src={toDirectImageUrl(project.image)}
+                          alt={project.title}
+                          className="w-full h-full object-cover"
+                          onError={e => { (e.currentTarget.parentElement as HTMLElement).style.display = 'none'; }}
+                        />
+                        <span className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-colors">
+                          <Maximize2 size={16} className="text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow" />
+                        </span>
+                      </button>
                     )}
 
                     {isTraffic ? (
@@ -290,6 +307,22 @@ export function StoryPanel({ points, activePoint, onPointSelect, projects, activ
       {/* ── דשבורד ── */}
       {tab === 'dashboard' && (
         <Dashboard points={points} projects={projects} segments={segments} />
+      )}
+
+      {/* ── Lightbox (full-size image) ── */}
+      {lightbox && (
+        <div className="fixed inset-0 z-[10000] bg-black/80 flex items-center justify-center p-4"
+          onClick={() => setLightbox(null)}>
+          <button onClick={() => setLightbox(null)}
+            className="absolute top-4 left-4 p-2 rounded-full bg-white/15 hover:bg-white/30 text-white transition-colors">
+            <X size={22} />
+          </button>
+          <figure className="max-w-full max-h-full flex flex-col items-center gap-3" onClick={e => e.stopPropagation()}>
+            <img src={lightbox.src} alt={lightbox.title}
+              className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl" />
+            <figcaption className="text-white text-sm font-medium text-center">{lightbox.title}</figcaption>
+          </figure>
+        </div>
       )}
     </div>
   );
