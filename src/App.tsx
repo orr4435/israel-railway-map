@@ -190,7 +190,7 @@ function App() {
             />
             <div>
               <h1 className="text-2xl font-bold text-gray-800">תחנות הרכבת בישראל</h1>
-              <p className="text-gray-500 text-sm">מפת סיפור המציגה את תחנות הרכבת ברחבי הארץ</p>
+              <p className="text-gray-500 text-sm">VONOMAP</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
