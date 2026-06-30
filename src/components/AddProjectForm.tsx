@@ -90,8 +90,10 @@ export function AddProjectForm({ onSubmit, onClose }: AddProjectFormProps) {
     onClose();
   };
 
-  const inputCls = (ring = 'focus:ring-green-500') =>
+  const inputCls  = (ring = 'focus:ring-green-500') =>
     `w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 ${ring}`;
+  const selectCls = (ring = 'focus:ring-green-500') =>
+    `w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 ${ring} bg-white`;
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]" dir="rtl">
@@ -203,15 +205,23 @@ export function AddProjectForm({ onSubmit, onClose }: AddProjectFormProps) {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">יזם</label>
-                  <input type="text" value={initiator} onChange={e => setInitiator(e.target.value)}
-                    placeholder='לדוגמה: נת"י'
-                    className={inputCls()} />
+                  <select value={initiator} onChange={e => setInitiator(e.target.value)} className={selectCls()}>
+                    <option value="">-- בחר יזם --</option>
+                    <option>נת"י</option>
+                    <option>רכבת ישראל</option>
+                    <option>עיריה</option>
+                    <option>מינהל</option>
+                  </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">נציג</label>
-                  <input type="text" value={representative} onChange={e => setRepresentative(e.target.value)}
-                    placeholder="שם הנציג"
-                    className={inputCls()} />
+                  <select value={representative} onChange={e => setRepresentative(e.target.value)} className={selectCls()}>
+                    <option value="">-- בחר נציג --</option>
+                    <option>ניסים חביב</option>
+                    <option>אליאס איוב</option>
+                    <option>גיל</option>
+                    <option>גולן בליטי</option>
+                  </select>
                 </div>
               </div>
 
@@ -219,15 +229,26 @@ export function AddProjectForm({ onSubmit, onClose }: AddProjectFormProps) {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">חברת ניהול</label>
-                  <input type="text" value={managementCompany} onChange={e => setManagementCompany(e.target.value)}
-                    placeholder="שם חברת הניהול"
-                    className={inputCls()} />
+                  <select value={managementCompany} onChange={e => setManagementCompany(e.target.value)} className={selectCls()}>
+                    <option value="">-- בחר חברה --</option>
+                    <option>חפת</option>
+                    <option>פרימוורה</option>
+                    <option>חפת/פרימוורה</option>
+                    <option>אפשטיין</option>
+                  </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">סטטוס</label>
-                  <input type="text" value={blockageStatus} onChange={e => setBlockageStatus(e.target.value)}
-                    placeholder="לדוגמה: מסירות, ביצוע, תכנון"
-                    className={inputCls()} />
+                  <select value={blockageStatus} onChange={e => setBlockageStatus(e.target.value)} className={selectCls()}>
+                    <option value="">-- בחר סטטוס --</option>
+                    <option>מסירות</option>
+                    <option>ביצוע</option>
+                    <option>תאום תכנון מפורט</option>
+                    <option>תיאום תכנון</option>
+                    <option>זומן לשימוע</option>
+                    <option>בתכנון</option>
+                    <option>השלמות</option>
+                  </select>
                 </div>
               </div>
             </>

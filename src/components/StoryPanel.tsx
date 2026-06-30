@@ -197,11 +197,12 @@ export function StoryPanel({ points, activePoint, onPointSelect, projects, activ
                 <p className="text-xs mt-1">לחץ על "הוסף פרויקט" בכותרת</p>
               </div>
             ) : projSlice.map(project => {
-              const act      = activeProject?.id === project.id;
-              const typeInfo = PROJECT_TYPES.find(t => t.type === project.projectType);
-              const typeClr  = typeInfo?.color ?? '#16a34a';
-              const isTraffic = project.projectType === 'הסדרי_תנועה';
-              const cardH    = isTraffic ? 'h-[96px]' : 'h-[86px]';
+              const act       = activeProject?.id === project.id;
+              const typeInfo  = PROJECT_TYPES.find(t => t.type === project.projectType);
+              const typeClr   = typeInfo?.color ?? '#16a34a';
+              const isTraffic  = project.projectType === 'הסדרי_תנועה';
+              const isBlockage = project.projectType === 'שדרוג_תשתית';
+              const cardH     = (isTraffic || isBlockage) ? 'h-[96px]' : 'h-[86px]';
               return (
                 <div key={project.id} onClick={() => onProjectSelect(project)}
                   className={`mb-2 rounded-xl cursor-pointer transition-all duration-200 border-2 overflow-hidden ${act ? 'shadow-sm' : 'border-transparent bg-gray-50 hover:bg-gray-100'}`}
@@ -265,6 +266,42 @@ export function StoryPanel({ points, activePoint, onPointSelect, projects, activ
                           )}
                         </div>
                       </div>
+                    ) : isBlockage ? (
+                      /* ── Blockage card ── */
+                      <div className={`p-3 ${cardH} flex-1 min-w-0 flex flex-col justify-between`}>
+                        <div className="flex items-start justify-between gap-2">
+                          <h3 className="font-bold text-gray-800 text-sm line-clamp-1">{project.title}</h3>
+                          <span className="shrink-0 text-[10px] font-bold rounded-full px-2 py-0.5"
+                            style={{ background: typeClr + '22', color: typeClr }}>
+                            {typeInfo?.icon} {typeInfo?.label}
+                          </span>
+                        </div>
+                        {project.subProject && (
+                          <div className="text-xs text-gray-600 line-clamp-1">
+                            <span className="text-gray-400">תת פרויקט: </span>{project.subProject}
+                          </div>
+                        )}
+                        <div className="flex items-center gap-3 text-xs text-gray-500 flex-wrap">
+                          {project.initiator && (
+                            <span className="flex items-center gap-1">
+                              <Building2 size={10} className="text-gray-400" />{project.initiator}
+                            </span>
+                          )}
+                          {project.representative && (
+                            <span className="flex items-center gap-1">
+                              <Wrench size={10} className="text-gray-400" />{project.representative}
+                            </span>
+                          )}
+                          {project.managementCompany && (
+                            <span className="flex items-center gap-1">
+                              <Building2 size={10} className="text-gray-400" />{project.managementCompany}
+                            </span>
+                          )}
+                          {project.blockageStatus && (
+                            <span className="font-semibold" style={{ color: typeClr }}>{project.blockageStatus}</span>
+                          )}
+                        </div>
+                      </div>
                     ) : (
                       /* ── Regular project card ── */
                       <div className={`p-3 ${cardH} flex-1 min-w-0 flex flex-col justify-between`}>
@@ -317,6 +354,12 @@ export function StoryPanel({ points, activePoint, onPointSelect, projects, activ
             className="absolute top-4 left-4 p-2 rounded-full bg-white/15 hover:bg-white/30 text-white transition-colors">
             <X size={22} />
           </button>
+          <a href={lightbox.src} target="_blank" rel="noopener noreferrer"
+            onClick={e => e.stopPropagation()}
+            className="absolute top-4 left-14 p-2 rounded-full bg-white/15 hover:bg-white/30 text-white transition-colors"
+            title="פתח בטאב חדש">
+            <ExternalLink size={22} />
+          </a>
           <figure className="max-w-full max-h-full flex flex-col items-center gap-3" onClick={e => e.stopPropagation()}>
             <img src={lightbox.src} alt={lightbox.title}
               className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl" />
