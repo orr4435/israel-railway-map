@@ -4,27 +4,6 @@ import 'leaflet/dist/leaflet.css';
 import { StoryPoint, Project, RailSegment, getStatusStyle, getSegmentStyle, STATUS_COLORS, SEGMENT_STATUS_COLORS, PROJECT_TYPES } from '../types';
 import { toDirectImageUrl } from '../lib/image';
 import L from 'leaflet';
-import proj4 from 'proj4';
-
-// ── Coordinate conversion (for 333.geojson) ───────────────────────────────────
-const ITM_PROJ =
-  '+proj=tmerc +lat_0=31.7343936111111 +lon_0=35.2045169444444 +k=1.0000067 +x_0=219529.584 +y_0=626907.39 +ellps=GRS80 +towgs84=-48,55,52,0,0,0,0 +units=m +no_defs';
-const WGS84_PROJ = '+proj=longlat +datum=WGS84 +no_defs';
-
-function convertITMFeatures(geojson: any) {
-  return {
-    ...geojson,
-    features: geojson.features.map((f: any) => {
-      if (f.geometry?.type === 'Point') {
-        const [x, y] = f.geometry.coordinates;
-        const [lng, lat] = proj4(ITM_PROJ, WGS84_PROJ, [x, y]);
-        return { ...f, geometry: { type: 'Point', coordinates: [lng, lat] } };
-      }
-      return f;
-    }),
-  };
-}
-
 // ── Icons ─────────────────────────────────────────────────────────────────────
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -106,28 +85,27 @@ function segmentPopupHTML(p: any): string {
 }
 
 // ── Layer-control panel ───────────────────────────────────────────────────────
-interface LayerState { railLines: boolean; data333: boolean; traffic: boolean; projects: boolean }
+interface LayerState { railLines: boolean; traffic: boolean; projects: boolean }
 interface StatusVisibility { [status: string]: boolean }
 
 function LayerControlPanel({
   layers, onToggle,
   statusVis, onToggleStatus, statusCounts,
-  loading, trafficAvailable, projectCount,
+  trafficAvailable, projectCount,
   onToggleAll, allOff,
 }: {
   layers: LayerState; onToggle: (k: keyof LayerState) => void;
   statusVis: StatusVisibility; onToggleStatus: (s: string) => void;
   statusCounts: Record<string, number>;
-  loading: Record<string, boolean>; trafficAvailable: boolean | null; projectCount: number;
+  trafficAvailable: boolean | null; projectCount: number;
   onToggleAll: () => void; allOff: boolean;
 }) {
   const [open, setOpen] = useState(true);
 
   const base: { key: keyof LayerState; label: string; color: string; isLine?: boolean }[] = [
-    { key: 'railLines', label: 'מסילות',                  color: '#3730a3', isLine: true },
-    { key: 'data333',   label: 'נתוני 333',                color: '#f97316' },
-    { key: 'traffic',   label: 'הסדרי תנועה',              color: '#dc2626', isLine: true },
-    { key: 'projects',  label: `פרויקטים (${projectCount})`, color: '#16a34a' },
+    { key: 'railLines', label: 'מסילות',                             color: '#3730a3', isLine: true },
+    { key: 'traffic',   label: 'הסדרי תנועה',                        color: '#dc2626', isLine: true },
+    { key: 'projects',  label: `הסדרי תנועה וחסמים (${projectCount})`, color: '#16a34a' },
   ];
 
   const dot = (color: string, isLine?: boolean) =>
@@ -214,12 +192,10 @@ interface MapProps {
 export function Map({ points, activePoint, onMarkerClick, projects, activeProject, onProjectClick, statusGeoJSON, activeSegment, onSegmentClick }: MapProps) {
   const center = { lat: 31.8, lng: 34.9 };
 
-  const [data333,      setData333]      = useState<any>(null);
   const [trafficData,  setTrafficData]  = useState<any>(null);
   const [trafficAvail, setTrafficAvail] = useState<boolean | null>(null);
-  const [loading, setLoading] = useState<Record<string, boolean>>({ data333: true, traffic: true });
 
-  const [layers, setLayers] = useState<LayerState>({ railLines: true, data333: true, traffic: true, projects: true });
+  const [layers, setLayers] = useState<LayerState>({ railLines: true, traffic: true, projects: true });
 
   const [statusVis, setStatusVis] = useState<StatusVisibility>(() => ({
     ...Object.fromEntries(Object.keys(SEGMENT_STATUS_COLORS).map(s => [s, true])),
@@ -237,15 +213,10 @@ export function Map({ points, activePoint, onMarkerClick, projects, activeProjec
   }, [statusGeoJSON, points]);
 
   useEffect(() => {
-    fetch('/333.geojson')
-      .then(r => r.json())
-      .then(raw => { setData333(convertITMFeatures(raw)); setLoading(p => ({ ...p, data333: false })); })
-      .catch(()  => setLoading(p => ({ ...p, data333: false })));
-
     fetch('/traffic.geojson')
       .then(r => { if (!r.ok) throw new Error(); return r.json(); })
-      .then(d  => { setTrafficData(d); setTrafficAvail(true);  setLoading(p => ({ ...p, traffic: false })); })
-      .catch(() => { setTrafficAvail(false); setLoading(p => ({ ...p, traffic: false })); });
+      .then(d  => { setTrafficData(d); setTrafficAvail(true); })
+      .catch(() => { setTrafficAvail(false); });
   }, []);
 
   const toggleLayer  = (k: keyof LayerState) => setLayers(p => ({ ...p, [k]: !p[k] }));
@@ -255,10 +226,10 @@ export function Map({ points, activePoint, onMarkerClick, projects, activeProjec
 
   const toggleAll = () => {
     if (allOff) {
-      setLayers({ railLines: true, data333: true, traffic: true, projects: true });
+      setLayers({ railLines: true, traffic: true, projects: true });
       setStatusVis(prev => Object.fromEntries(Object.keys(prev).map(k => [k, true])));
     } else {
-      setLayers({ railLines: false, data333: false, traffic: false, projects: false });
+      setLayers({ railLines: false, traffic: false, projects: false });
       setStatusVis(prev => Object.fromEntries(Object.keys(prev).map(k => [k, false])));
     }
   };
@@ -277,14 +248,6 @@ export function Map({ points, activePoint, onMarkerClick, projects, activeProjec
   }, [activeSegment]);
 
   const highlightStyle = () => ({ color: '#f59e0b', weight: 6, opacity: 0.9 });
-
-  const geo333PointToLayer = (_: any, latlng: L.LatLng) =>
-    L.circleMarker(latlng, { radius: 5, fillColor: '#f97316', color: '#c2410c', weight: 1, opacity: 1, fillOpacity: 0.8 });
-
-  const geo333EachFeature = (feature: any, layer: L.Layer) => {
-    const { NAME, STATUS, TYPE } = feature.properties ?? {};
-    if (NAME) (layer as L.CircleMarker).bindPopup(`<div dir="rtl"><strong>${NAME}</strong><br/>סטטוס: ${STATUS ?? '—'}<br/>סוג: ${TYPE ?? '—'}</div>`);
-  };
 
   const trafficStyle = () => ({ color: '#dc2626', weight: 2, opacity: 0.75, dashArray: '6 4' });
 
@@ -311,7 +274,7 @@ export function Map({ points, activePoint, onMarkerClick, projects, activeProjec
   const flyTarget = activeSegment?.midpoint ?? activeProject?.location ?? activePoint?.location;
 
   const visiblePoints = useMemo(
-    () => points.filter(p => statusVis[`stn_${p.status}`] ?? true),
+    () => points.filter(p => statusVis[`stn_${p.status}`] ?? false),
     [points, statusVis]
   );
 
@@ -331,11 +294,6 @@ export function Map({ points, activePoint, onMarkerClick, projects, activeProjec
       {/* הדגשת מסילה פעילה */}
       {activeFeatureCollection && layers.railLines && (
         <LeafletGeoJSON key={`highlight-${activeSegment?.id}`} data={activeFeatureCollection} style={highlightStyle} />
-      )}
-
-      {/* 333.geojson */}
-      {data333 && layers.data333 && (
-        <LeafletGeoJSON key="d333" data={data333} pointToLayer={geo333PointToLayer} onEachFeature={geo333EachFeature} />
       )}
 
       {/* הסדרי תנועה */}
@@ -430,6 +388,15 @@ export function Map({ points, activePoint, onMarkerClick, projects, activeProjec
                     {project.managementCompany      && <tr><td style={{ color:'#888', paddingBottom:2 }}>חברת ניהול</td><td style={{ paddingRight:8, fontWeight:600 }}>{project.managementCompany}</td></tr>}
                     {project.notes                  && <tr><td style={{ color:'#888', paddingBottom:2 }}>הערות</td><td style={{ paddingRight:8 }}>{project.notes}</td></tr>}
                   </table>
+                ) : project.projectType === 'שדרוג_תשתית' ? (
+                  <table style={{ fontSize:12, color:'#555', marginTop:6, width:'100%', borderCollapse:'collapse' }}>
+                    {project.subProject        && <tr><td style={{ color:'#888', paddingBottom:2 }}>תת פרויקט</td><td style={{ paddingRight:8, fontWeight:600 }}>{project.subProject}</td></tr>}
+                    {project.initiator         && <tr><td style={{ color:'#888', paddingBottom:2 }}>יזם</td><td style={{ paddingRight:8, fontWeight:600 }}>{project.initiator}</td></tr>}
+                    {project.representative    && <tr><td style={{ color:'#888', paddingBottom:2 }}>נציג</td><td style={{ paddingRight:8, fontWeight:600 }}>{project.representative}</td></tr>}
+                    {project.managementCompany && <tr><td style={{ color:'#888', paddingBottom:2 }}>חברת ניהול</td><td style={{ paddingRight:8, fontWeight:600 }}>{project.managementCompany}</td></tr>}
+                    {project.blockageStatus    && <tr><td style={{ color:'#888', paddingBottom:2 }}>סטטוס</td><td style={{ paddingRight:8, fontWeight:600 }}>{project.blockageStatus}</td></tr>}
+                    {project.notes             && <tr><td style={{ color:'#888', paddingBottom:2 }}>הערות</td><td style={{ paddingRight:8 }}>{project.notes}</td></tr>}
+                  </table>
                 ) : (
                   <table style={{ fontSize:12, color:'#555', marginTop:6, width:'100%', borderCollapse:'collapse' }}>
                     {project.targetYear && <tr><td style={{ color:'#888', paddingBottom:2 }}>שנת יעד</td><td style={{ paddingRight:8, fontWeight:600 }}>{project.targetYear}</td></tr>}
@@ -447,7 +414,7 @@ export function Map({ points, activePoint, onMarkerClick, projects, activeProjec
         layers={layers}           onToggle={toggleLayer}
         statusVis={statusVis}     onToggleStatus={toggleStatus}
         statusCounts={segmentCounts}
-        loading={loading}         trafficAvailable={trafficAvail}
+        trafficAvailable={trafficAvail}
         projectCount={projects.length}
         onToggleAll={toggleAll}   allOff={allOff}
       />

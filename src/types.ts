@@ -31,7 +31,7 @@ export const PROJECT_TYPES: { type: ProjectType; label: string; color: string; i
   { type: 'פיתוח_תחנה',  label: 'פיתוח תחנה',   color: '#2563eb', icon: '🚉', desc: 'בנייה ושדרוג תחנות'   },
   { type: 'הקמת_מסילה',  label: 'הקמת מסילה',   color: '#7c3aed', icon: '🛤️', desc: 'סלילת מסילות חדשות'  },
   { type: 'הסדרי_תנועה', label: 'הסדרי תנועה',  color: '#dc2626', icon: '🚦', desc: 'ניהול תנועה ומעברים' },
-  { type: 'שדרוג_תשתית', label: 'שדרוג תשתית',  color: '#d97706', icon: '🔧', desc: 'שיפור תשתית קיימת'   },
+  { type: 'שדרוג_תשתית', label: 'חסמים',         color: '#d97706', icon: '🚧', desc: 'חסמים ומניעת גישה'   },
   { type: 'אחר',          label: 'אחר',           color: '#6b7280', icon: '📋', desc: 'פרויקטים מגוונים'    },
 ];
 
@@ -52,7 +52,13 @@ export interface Project {
   trafficClosureDate?: string;    // מועד סגירה משוער
   trafficClosureDuration?: string;// משך סגירה משוער
   contractor?: string;            // קבלן
-  managementCompany?: string;     // חברת ניהול
+  managementCompany?: string;     // חברת ניהול (also used for חסמים)
+
+  // Blockage-specific fields (used when projectType === 'שדרוג_תשתית')
+  subProject?: string;            // תת פרויקט
+  initiator?: string;             // יזם
+  representative?: string;        // נציג
+  blockageStatus?: string;        // סטטוס
 
   image?: string;
   notes?: string;

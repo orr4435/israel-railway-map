@@ -11,7 +11,8 @@ interface AddProjectFormProps {
 
 type DrawMode = 'point' | 'polyline';
 
-const IS_TRAFFIC = (t: ProjectType) => t === 'הסדרי_תנועה';
+const IS_TRAFFIC  = (t: ProjectType) => t === 'הסדרי_תנועה';
+const IS_BLOCKAGE = (t: ProjectType) => t === 'שדרוג_תשתית';
 
 export function AddProjectForm({ onSubmit, onClose }: AddProjectFormProps) {
   const [projectType, setProjectType] = useState<ProjectType>('אחר');
@@ -35,7 +36,14 @@ export function AddProjectForm({ onSubmit, onClose }: AddProjectFormProps) {
   const [contractor,             setContractor]             = useState('');
   const [managementCompany,      setManagementCompany]      = useState('');
 
-  const isTraffic = IS_TRAFFIC(projectType);
+  // blockage (חסמים) fields
+  const [subProject,     setSubProject]     = useState('');
+  const [initiator,      setInitiator]      = useState('');
+  const [representative, setRepresentative] = useState('');
+  const [blockageStatus, setBlockageStatus] = useState('');
+
+  const isTraffic  = IS_TRAFFIC(projectType);
+  const isBlockage = IS_BLOCKAGE(projectType);
 
   const handleTypeChange = (t: ProjectType) => {
     setProjectType(t);
@@ -47,7 +55,7 @@ export function AddProjectForm({ onSubmit, onClose }: AddProjectFormProps) {
   const validate = () => {
     if (!geometry) return false;
     if (geometry.type === 'LineString' && geometry.coordinates.length < 2) return false;
-    if (!isTraffic && (!targetYear.trim() || !cost.trim())) return false;
+    if (!isTraffic && !isBlockage && (!targetYear.trim() || !cost.trim())) return false;
     return true;
   };
 
@@ -64,15 +72,20 @@ export function AddProjectForm({ onSubmit, onClose }: AddProjectFormProps) {
       geometry: geometry!,
       image: image || undefined,
       notes: notes || undefined,
-      // regular fields (empty for traffic)
-      targetYear: isTraffic ? undefined : targetYear,
-      cost:       isTraffic ? undefined : cost,
+      // regular fields (empty for traffic/blockage)
+      targetYear: isTraffic || isBlockage ? undefined : targetYear,
+      cost:       isTraffic || isBlockage ? undefined : cost,
       // traffic fields (undefined for non-traffic)
       trafficPurpose:         isTraffic ? (trafficPurpose         || undefined) : undefined,
       trafficClosureDate:     isTraffic ? (trafficClosureDate     || undefined) : undefined,
       trafficClosureDuration: isTraffic ? (trafficClosureDuration || undefined) : undefined,
       contractor:             isTraffic ? (contractor             || undefined) : undefined,
-      managementCompany:      isTraffic ? (managementCompany      || undefined) : undefined,
+      managementCompany:      (isTraffic || isBlockage) ? (managementCompany || undefined) : undefined,
+      // blockage fields (undefined for non-blockage)
+      subProject:     isBlockage ? (subProject     || undefined) : undefined,
+      initiator:      isBlockage ? (initiator      || undefined) : undefined,
+      representative: isBlockage ? (representative || undefined) : undefined,
+      blockageStatus: isBlockage ? (blockageStatus || undefined) : undefined,
     });
     onClose();
   };
@@ -124,10 +137,10 @@ export function AddProjectForm({ onSubmit, onClose }: AddProjectFormProps) {
           {/* ── שם הפרויקט / ההסדר ── */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              {isTraffic ? 'שם ההסדר' : 'שם הפרויקט'} <span className="text-red-500">*</span>
+              {isTraffic ? 'שם ההסדר' : isBlockage ? 'שם החסם' : 'שם הפרויקט'} <span className="text-red-500">*</span>
             </label>
             <input type="text" value={title} onChange={e => setTitle(e.target.value)} required
-              placeholder={isTraffic ? 'לדוגמה: הסדר תנועה צומת גהה' : 'לדוגמה: הארכת מסילה לאשקלון'}
+              placeholder={isTraffic ? 'לדוגמה: הסדר תנועה צומת גהה' : isBlockage ? 'לדוגמה: מסילה מזרחית — גשר 444' : 'לדוגמה: הארכת מסילה לאשקלון'}
               className={inputCls()} />
           </div>
 
@@ -175,6 +188,49 @@ export function AddProjectForm({ onSubmit, onClose }: AddProjectFormProps) {
                 </div>
               </div>
             </>
+          ) : isBlockage ? (
+            /* ======== חסמים ======== */
+            <>
+              {/* תת פרויקט */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">תת פרויקט</label>
+                <input type="text" value={subProject} onChange={e => setSubProject(e.target.value)}
+                  placeholder="לדוגמה: גשר 444, קטע A"
+                  className={inputCls()} />
+              </div>
+
+              {/* יזם + נציג */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">יזם</label>
+                  <input type="text" value={initiator} onChange={e => setInitiator(e.target.value)}
+                    placeholder='לדוגמה: נת"י'
+                    className={inputCls()} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">נציג</label>
+                  <input type="text" value={representative} onChange={e => setRepresentative(e.target.value)}
+                    placeholder="שם הנציג"
+                    className={inputCls()} />
+                </div>
+              </div>
+
+              {/* חברת ניהול + סטטוס */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">חברת ניהול</label>
+                  <input type="text" value={managementCompany} onChange={e => setManagementCompany(e.target.value)}
+                    placeholder="שם חברת הניהול"
+                    className={inputCls()} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">סטטוס</label>
+                  <input type="text" value={blockageStatus} onChange={e => setBlockageStatus(e.target.value)}
+                    placeholder="לדוגמה: מסירות, ביצוע, תכנון"
+                    className={inputCls()} />
+                </div>
+              </div>
+            </>
           ) : (
             /* ======== פרויקט רגיל ======== */
             <div className="grid grid-cols-2 gap-4">
@@ -183,7 +239,7 @@ export function AddProjectForm({ onSubmit, onClose }: AddProjectFormProps) {
                   שנת יעד <span className="text-red-500">*</span>
                 </label>
                 <input type="text" value={targetYear} onChange={e => setTargetYear(e.target.value)}
-                  required={!isTraffic} placeholder="2028"
+                  required={!isTraffic && !isBlockage} placeholder="2028"
                   className={inputCls()} />
               </div>
               <div>
@@ -191,7 +247,7 @@ export function AddProjectForm({ onSubmit, onClose }: AddProjectFormProps) {
                   עלות הפרויקט <span className="text-red-500">*</span>
                 </label>
                 <input type="text" value={cost} onChange={e => setCost(e.target.value)}
-                  required={!isTraffic} placeholder="₪ 500,000,000"
+                  required={!isTraffic && !isBlockage} placeholder="₪ 500,000,000"
                   className={inputCls()} />
               </div>
             </div>
@@ -201,8 +257,9 @@ export function AddProjectForm({ onSubmit, onClose }: AddProjectFormProps) {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               מיקום גאוגרפי <span className="text-red-500">*</span>
-              {projectType === 'הקמת_מסילה'    && <span className="mr-2 text-[11px] font-normal text-indigo-500">— שרטט את מסלול המסילה על המפה</span>}
-              {projectType === 'הסדרי_תנועה'   && <span className="mr-2 text-[11px] font-normal text-red-500">— סמן את אזור ההסדר על המפה</span>}
+              {projectType === 'הקמת_מסילה'   && <span className="mr-2 text-[11px] font-normal text-indigo-500">— שרטט את מסלול המסילה על המפה</span>}
+              {projectType === 'הסדרי_תנועה'  && <span className="mr-2 text-[11px] font-normal text-red-500">— סמן את אזור ההסדר על המפה</span>}
+              {projectType === 'שדרוג_תשתית'  && <span className="mr-2 text-[11px] font-normal text-amber-600">— סמן את מיקום החסם על המפה</span>}
             </label>
             <GeoPickerMap
               mode={drawMode}
@@ -247,7 +304,7 @@ export function AddProjectForm({ onSubmit, onClose }: AddProjectFormProps) {
           <div className="flex justify-start gap-3 pt-4 border-t border-gray-100">
             <button type="submit"
               className="px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium">
-              {isTraffic ? 'הוסף הסדר תנועה' : 'הוסף פרויקט'}
+              {isTraffic ? 'הוסף הסדר תנועה' : isBlockage ? 'הוסף חסם' : 'הוסף פרויקט'}
             </button>
             <button type="button" onClick={onClose}
               className="px-5 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-gray-700">
