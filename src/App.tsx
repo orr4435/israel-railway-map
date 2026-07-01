@@ -32,6 +32,7 @@ function App() {
   useEffect(() => {
     fetchStations();
     fetchSegments();
+    fetchStaticBlockages();
     if (sheetsEnabled) fetchFromSheets();
   }, []);
 
@@ -87,6 +88,20 @@ function App() {
     } catch {
       setError('שגיאה בטעינת נתוני המסילות');
     }
+  };
+
+  // ── Static blockages (always loaded from public/blockages.json) ────────────
+
+  const fetchStaticBlockages = async () => {
+    try {
+      const res = await fetch('/blockages.json');
+      if (!res.ok) return;
+      const data: Project[] = await res.json();
+      setProjects(prev => {
+        const existingIds = new Set(prev.map(p => p.id));
+        return [...prev, ...data.filter(b => !existingIds.has(b.id))];
+      });
+    } catch { /* silent — static file missing is not critical */ }
   };
 
   // ── Google Sheets sync ─────────────────────────────────────────────────────

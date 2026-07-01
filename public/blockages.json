@@ -1,0 +1,86 @@
+[
+  {
+    "id": "blockage-1",
+    "title": "מסילה מזרחית",
+    "projectType": "שדרוג_תשתית",
+    "subProject": "A+B",
+    "initiator": "נת\"י",
+    "representative": "ניסים חביב",
+    "managementCompany": "חפת/פרימוורה",
+    "blockageStatus": "מסירות",
+    "notes": "אינטגרציה- בוצעה מול מכון התקנים ומול אגף הנדסת בטיחות ונדרשת פנימים ע\"י מנהלת איתות וטכנ' (פיתוח) עלול להוות חסם לפתיחה.",
+    "location": { "lat": 32.27, "lng": 34.95 }
+  },
+  {
+    "id": "blockage-2",
+    "title": "מסילה מזרחית",
+    "projectType": "שדרוג_תשתית",
+    "subProject": "גשר 444",
+    "initiator": "נת\"י",
+    "representative": "ניסים חביב",
+    "managementCompany": "חפת",
+    "blockageStatus": "ביצוע",
+    "notes": "ממונה בטיחות נדרש מעבר לתאריך המסירה לתיאום הנפות בסביבת המסילה.",
+    "location": { "lat": 32.183, "lng": 34.953 }
+  },
+  {
+    "id": "blockage-6",
+    "title": "יבנה מזרח",
+    "projectType": "שדרוג_תשתית",
+    "subProject": "",
+    "initiator": "נת\"י",
+    "representative": "",
+    "managementCompany": "חפת",
+    "blockageStatus": "תאום תכנון מפורט",
+    "notes": "פגישה מול המנכ\"ל ב-12.7.26, נדרש להבין איך ניגשים לפרויקט מורכב כזה, לטובת הנושא נדרש תאריך להצגת הפרויקט מולך, רצוי לפני פגישת המנכ\"ל אל מול נציגי מת\"ח.",
+    "location": { "lat": 31.856569, "lng": 34.739342 }
+  },
+  {
+    "id": "blockage-8",
+    "title": "ממונה בטיחות",
+    "projectType": "שדרוג_תשתית",
+    "subProject": "כלל הפרויקטים",
+    "initiator": "",
+    "representative": "אליאס איוב",
+    "managementCompany": "אפשטיין",
+    "blockageStatus": "זומן לשימוע",
+    "notes": "עולות דרישות מטעם הפרויקטים השונים לתיאום חקרי קרקע / מדידות / בדיקות בהם נדרשים משאבים וטפסי בטיחות. נדרש להבין האם יבוצע ע\"י נציג רועי ציון? גם כאשר נדרשים סיורים מקדימים וטפסי 609, 610.",
+    "location": { "lat": 32.08, "lng": 34.78 }
+  },
+  {
+    "id": "blockage-10a",
+    "title": "תתל 65",
+    "projectType": "שדרוג_תשתית",
+    "subProject": "גשר זכרון",
+    "initiator": "נת\"י",
+    "representative": "",
+    "managementCompany": "חפת",
+    "blockageStatus": "תאום תכנון מפורט",
+    "notes": "פגישה מול המנכ\"ל ב-12.7.26, נדרש להבין איך ניגשים לפרויקט מורכב כזה, לטובת הנושא נדרש תאריך להצגת הפרויקט מולך, רצוי לפני פגישת המנכ\"ל אל מול נציגי מת\"ח.",
+    "location": { "lat": 32.589722, "lng": 34.927778 }
+  },
+  {
+    "id": "blockage-10b",
+    "title": "תתל 65",
+    "projectType": "שדרוג_תשתית",
+    "subProject": "גשר חדרה",
+    "initiator": "נת\"י",
+    "representative": "",
+    "managementCompany": "חפת",
+    "blockageStatus": "תיאום תכנון",
+    "notes": "בהמשך פגישה עם גיל וגולן בליטי ולאור אי הסכמה נדרש תיאום פגישה בנוכחות הסמנכ\"ל.",
+    "location": { "lat": 32.4382, "lng": 34.8991 }
+  },
+  {
+    "id": "blockage-12",
+    "title": "ממונה בטיחות",
+    "projectType": "שדרוג_תשתית",
+    "subProject": "כלל הפרויקטים",
+    "initiator": "נת\"י",
+    "representative": "",
+    "managementCompany": "חפת",
+    "blockageStatus": "תיאום תכנון",
+    "notes": "בהמשך פגישה עם גיל וגולן בליטי ולאור אי הסכמה נדרש תיאום פגישה בנוכחות הסמנכ\"ל.",
+    "location": { "lat": 32.08, "lng": 34.79 }
+  }
+]
