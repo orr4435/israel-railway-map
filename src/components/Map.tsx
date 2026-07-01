@@ -85,26 +85,25 @@ function segmentPopupHTML(p: any): string {
 }
 
 // ── Layer-control panel ───────────────────────────────────────────────────────
-interface LayerState { railLines: boolean; traffic: boolean; projects: boolean }
+interface LayerState { railLines: boolean; projects: boolean }
 interface StatusVisibility { [status: string]: boolean }
 
 function LayerControlPanel({
   layers, onToggle,
   statusVis, onToggleStatus, statusCounts,
-  trafficAvailable, projectCount,
+  projectCount,
   onToggleAll, allOff,
 }: {
   layers: LayerState; onToggle: (k: keyof LayerState) => void;
   statusVis: StatusVisibility; onToggleStatus: (s: string) => void;
   statusCounts: Record<string, number>;
-  trafficAvailable: boolean | null; projectCount: number;
+  projectCount: number;
   onToggleAll: () => void; allOff: boolean;
 }) {
   const [open, setOpen] = useState(true);
 
   const base: { key: keyof LayerState; label: string; color: string; isLine?: boolean }[] = [
     { key: 'railLines', label: 'מסילות',                             color: '#3730a3', isLine: true },
-    { key: 'traffic',   label: 'הסדרי תנועה',                        color: '#dc2626', isLine: true },
     { key: 'projects',  label: `הסדרי תנועה וחסמים (${projectCount})`, color: '#16a34a' },
   ];
 
@@ -134,19 +133,14 @@ function LayerControlPanel({
         <>
           {/* base layers */}
           <div className="px-3 pt-2 pb-2">
-            {base.map(({ key, label, color, isLine }) => {
-              const disabled = key === 'traffic' && trafficAvailable === false;
-              return (
-                <label key={key} className={`flex items-center gap-2 mb-1.5 cursor-pointer select-none ${disabled ? 'opacity-40' : ''}`}>
-                  <input type="checkbox" checked={layers[key]} onChange={() => !disabled && onToggle(key)} disabled={disabled} className="w-3.5 h-3.5 accent-blue-600" />
-                  <span className="flex items-center gap-1.5 text-sm font-medium text-gray-700">
-                    {dot(color, isLine)} {label}
-                    {key === 'traffic' && trafficAvailable === null  && <span className="text-[10px] text-gray-400">טוען…</span>}
-                    {key === 'traffic' && trafficAvailable === false && <span className="text-[10px] text-gray-400">לא נטען</span>}
-                  </span>
-                </label>
-              );
-            })}
+            {base.map(({ key, label, color, isLine }) => (
+              <label key={key} className="flex items-center gap-2 mb-1.5 cursor-pointer select-none">
+                <input type="checkbox" checked={layers[key]} onChange={() => onToggle(key)} className="w-3.5 h-3.5 accent-blue-600" />
+                <span className="flex items-center gap-1.5 text-sm font-medium text-gray-700">
+                  {dot(color, isLine)} {label}
+                </span>
+              </label>
+            ))}
           </div>
 
           {/* מסילות לפי סטטוס */}
@@ -192,10 +186,7 @@ interface MapProps {
 export function Map({ points, activePoint, onMarkerClick, projects, activeProject, onProjectClick, statusGeoJSON, activeSegment, onSegmentClick }: MapProps) {
   const center = { lat: 31.8, lng: 34.9 };
 
-  const [trafficData,  setTrafficData]  = useState<any>(null);
-  const [trafficAvail, setTrafficAvail] = useState<boolean | null>(null);
-
-  const [layers, setLayers] = useState<LayerState>({ railLines: true, traffic: true, projects: true });
+  const [layers, setLayers] = useState<LayerState>({ railLines: true, projects: true });
 
   const [statusVis, setStatusVis] = useState<StatusVisibility>(() => ({
     ...Object.fromEntries(Object.keys(SEGMENT_STATUS_COLORS).map(s => [s, true])),
@@ -212,13 +203,6 @@ export function Map({ points, activePoint, onMarkerClick, projects, activeProjec
     return acc;
   }, [statusGeoJSON, points]);
 
-  useEffect(() => {
-    fetch('/traffic.geojson')
-      .then(r => { if (!r.ok) throw new Error(); return r.json(); })
-      .then(d  => { setTrafficData(d); setTrafficAvail(true); })
-      .catch(() => { setTrafficAvail(false); });
-  }, []);
-
   const toggleLayer  = (k: keyof LayerState) => setLayers(p => ({ ...p, [k]: !p[k] }));
   const toggleStatus = (s: string)           => setStatusVis(p => ({ ...p, [s]: !p[s] }));
 
@@ -226,10 +210,10 @@ export function Map({ points, activePoint, onMarkerClick, projects, activeProjec
 
   const toggleAll = () => {
     if (allOff) {
-      setLayers({ railLines: true, traffic: true, projects: true });
+      setLayers({ railLines: true, projects: true });
       setStatusVis(prev => Object.fromEntries(Object.keys(prev).map(k => [k, true])));
     } else {
-      setLayers({ railLines: false, traffic: false, projects: false });
+      setLayers({ railLines: false, projects: false });
       setStatusVis(prev => Object.fromEntries(Object.keys(prev).map(k => [k, false])));
     }
   };
@@ -248,8 +232,6 @@ export function Map({ points, activePoint, onMarkerClick, projects, activeProjec
   }, [activeSegment]);
 
   const highlightStyle = () => ({ color: '#f59e0b', weight: 6, opacity: 0.9 });
-
-  const trafficStyle = () => ({ color: '#dc2626', weight: 2, opacity: 0.75, dashArray: '6 4' });
 
   const railOnEachFeature = (feature: any, layer: L.Layer) => {
     const p = feature.properties ?? {};
@@ -294,16 +276,6 @@ export function Map({ points, activePoint, onMarkerClick, projects, activeProjec
       {/* הדגשת מסילה פעילה */}
       {activeFeatureCollection && layers.railLines && (
         <LeafletGeoJSON key={`highlight-${activeSegment?.id}`} data={activeFeatureCollection} style={highlightStyle} />
-      )}
-
-      {/* הסדרי תנועה */}
-      {trafficData && layers.traffic && (
-        <LeafletGeoJSON key="traffic" data={trafficData} style={trafficStyle}
-          onEachFeature={(f, l) => {
-            const lbl = f.properties?.NAME || f.properties?.name || f.properties?.DESCRIPTION || 'הסדר תנועה';
-            (l as any).bindPopup(`<div dir="rtl"><strong>${lbl}</strong></div>`);
-          }}
-        />
       )}
 
       {/* תחנות — polyline geometry (if drawn) */}
@@ -414,7 +386,6 @@ export function Map({ points, activePoint, onMarkerClick, projects, activeProjec
         layers={layers}           onToggle={toggleLayer}
         statusVis={statusVis}     onToggleStatus={toggleStatus}
         statusCounts={segmentCounts}
-        trafficAvailable={trafficAvail}
         projectCount={projects.length}
         onToggleAll={toggleAll}   allOff={allOff}
       />
