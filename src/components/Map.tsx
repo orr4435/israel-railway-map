@@ -52,6 +52,14 @@ function makeProjectIcon(projectType: string | undefined, isActive: boolean): L.
     });
   }
 
+  if (projectType === 'שדרוג_תשתית') {
+    // road-barrier stripe pattern for blockages
+    return L.divIcon({
+      html: `<div style="position:relative;width:${size}px;height:${size}px">${ring}<div style="position:relative;width:${size}px;height:${size}px;background:repeating-linear-gradient(-45deg,${color},${color} 3px,#fff 3px,#fff 6px);border:2px solid white;border-radius:3px;box-shadow:0 1px 4px rgba(0,0,0,0.35)"></div></div>`,
+      className: '', iconSize: [size, size], iconAnchor: [size / 2, size / 2], popupAnchor: [0, -size / 2 - 4],
+    });
+  }
+
   return makeCircleIcon(color, size, isActive);
 }
 
@@ -92,15 +100,18 @@ function LayerControlPanel({
   layers, onToggle,
   statusVis, onToggleStatus, statusCounts,
   projectCount,
+  blockageTitles, blockageVis, onToggleBlockage,
   onToggleAll, allOff,
 }: {
   layers: LayerState; onToggle: (k: keyof LayerState) => void;
   statusVis: StatusVisibility; onToggleStatus: (s: string) => void;
   statusCounts: Record<string, number>;
   projectCount: number;
+  blockageTitles: string[]; blockageVis: Record<string, boolean>; onToggleBlockage: (t: string) => void;
   onToggleAll: () => void; allOff: boolean;
 }) {
   const [open, setOpen] = useState(true);
+  const BLOCKAGE_COLOR = '#d97706';
 
   const base: { key: keyof LayerState; label: string; color: string; isLine?: boolean }[] = [
     { key: 'railLines', label: 'מסילות',                             color: '#3730a3', isLine: true },
@@ -111,6 +122,14 @@ function LayerControlPanel({
     isLine
       ? <span style={{ display:'inline-block', width:14, height:3, background:color, borderRadius:2 }} />
       : <span style={{ display:'inline-block', width:11, height:11, background:color, borderRadius:'50%' }} />;
+
+  const barrierDot = (size = 11) => (
+    <span style={{
+      display:'inline-block', width:size, height:size, borderRadius:2,
+      background:`repeating-linear-gradient(-45deg,${BLOCKAGE_COLOR},${BLOCKAGE_COLOR} 2px,#fff 2px,#fff 4px)`,
+      border:`1.5px solid ${BLOCKAGE_COLOR}`, flexShrink:0,
+    }} />
+  );
 
   return (
     <div className="absolute top-4 right-4 bg-white rounded-xl shadow-lg z-[1000] overflow-hidden text-right" dir="rtl" style={{ minWidth:230 }}>
@@ -142,6 +161,23 @@ function LayerControlPanel({
               </label>
             ))}
           </div>
+
+          {/* חסמים לפי פרויקט */}
+          {blockageTitles.length > 0 && (
+            <div className="border-t border-gray-100 px-3 pt-2 pb-2">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">חסמים לפי פרויקט</p>
+              {blockageTitles.map(title => (
+                <label key={title} className="flex items-center gap-2 mb-1 cursor-pointer select-none">
+                  <input type="checkbox" checked={blockageVis[title] ?? true}
+                    onChange={() => onToggleBlockage(title)}
+                    className="w-3.5 h-3.5" style={{ accentColor: BLOCKAGE_COLOR }} />
+                  <span className="flex items-center gap-1.5 text-sm font-medium" style={{ color: BLOCKAGE_COLOR }}>
+                    {barrierDot()} {title}
+                  </span>
+                </label>
+              ))}
+            </div>
+          )}
 
           {/* מסילות לפי סטטוס */}
           <div className="border-t border-gray-100 px-3 pt-2 pb-2">
@@ -193,6 +229,32 @@ export function Map({ points, activePoint, onMarkerClick, projects, activeProjec
     ...Object.fromEntries(Object.keys(STATUS_COLORS).map(s => [`stn_${s}`, true])),
   }));
 
+  // blockage sub-layers — keyed by unique project title
+  const [blockageVis, setBlockageVis] = useState<Record<string, boolean>>({});
+
+  const blockageTitles = useMemo(() => {
+    const seen = new Set<string>();
+    projects.filter(p => p.projectType === 'שדרוג_תשתית').forEach(p => seen.add(p.title));
+    return [...seen].sort((a, b) => a.localeCompare(b, 'he'));
+  }, [projects]);
+
+  useEffect(() => {
+    setBlockageVis(prev => {
+      const next = { ...prev };
+      blockageTitles.forEach(t => { if (!(t in next)) next[t] = true; });
+      return next;
+    });
+  }, [blockageTitles]);
+
+  const visibleProjects = useMemo(() =>
+    layers.projects
+      ? projects.filter(p =>
+          p.projectType !== 'שדרוג_תשתית' || (blockageVis[p.title] ?? true)
+        )
+      : [],
+    [projects, layers.projects, blockageVis]
+  );
+
   const segmentCounts = useMemo<Record<string, number>>(() => {
     const acc: Record<string, number> = {};
     (statusGeoJSON?.features ?? []).forEach((f: any) => {
@@ -203,18 +265,23 @@ export function Map({ points, activePoint, onMarkerClick, projects, activeProjec
     return acc;
   }, [statusGeoJSON, points]);
 
-  const toggleLayer  = (k: keyof LayerState) => setLayers(p => ({ ...p, [k]: !p[k] }));
-  const toggleStatus = (s: string)           => setStatusVis(p => ({ ...p, [s]: !p[s] }));
+  const toggleLayer        = (k: keyof LayerState) => setLayers(p => ({ ...p, [k]: !p[k] }));
+  const toggleStatus       = (s: string)           => setStatusVis(p => ({ ...p, [s]: !p[s] }));
+  const toggleBlockage     = (t: string)           => setBlockageVis(p => ({ ...p, [t]: !p[t] }));
 
-  const allOff = !Object.values(layers).some(v => v) && !Object.values(statusVis).some(v => v);
+  const allOff = !Object.values(layers).some(v => v) &&
+                 !Object.values(statusVis).some(v => v) &&
+                 !Object.values(blockageVis).some(v => v);
 
   const toggleAll = () => {
     if (allOff) {
       setLayers({ railLines: true, projects: true });
       setStatusVis(prev => Object.fromEntries(Object.keys(prev).map(k => [k, true])));
+      setBlockageVis(prev => Object.fromEntries(Object.keys(prev).map(k => [k, true])));
     } else {
       setLayers({ railLines: false, projects: false });
       setStatusVis(prev => Object.fromEntries(Object.keys(prev).map(k => [k, false])));
+      setBlockageVis(prev => Object.fromEntries(Object.keys(prev).map(k => [k, false])));
     }
   };
 
@@ -313,7 +380,7 @@ export function Map({ points, activePoint, onMarkerClick, projects, activeProjec
       })}
 
       {/* פרויקטים — polyline geometry */}
-      {layers.projects && projects.filter(p => p.geometry?.type === 'LineString').map(project => {
+      {visibleProjects.filter(p => p.geometry?.type === 'LineString').map(project => {
         const typeClr = projectTypeColor(project.projectType);
         const active  = activeProject?.id === project.id;
         const positions = (project.geometry!.coordinates).map(c => [c.lat, c.lng] as [number, number]);
@@ -327,7 +394,7 @@ export function Map({ points, activePoint, onMarkerClick, projects, activeProjec
       })}
 
       {/* פרויקטים — icon shape and color per projectType */}
-      {layers.projects && projects.map(project => {
+      {visibleProjects.map(project => {
         const active   = activeProject?.id === project.id;
         const typeInfo = PROJECT_TYPES.find(t => t.type === project.projectType);
         const typeLbl  = typeInfo?.label ?? 'פרויקט';
@@ -383,11 +450,12 @@ export function Map({ points, activePoint, onMarkerClick, projects, activeProjec
       })}
 
       <LayerControlPanel
-        layers={layers}           onToggle={toggleLayer}
-        statusVis={statusVis}     onToggleStatus={toggleStatus}
+        layers={layers}             onToggle={toggleLayer}
+        statusVis={statusVis}       onToggleStatus={toggleStatus}
         statusCounts={segmentCounts}
         projectCount={projects.length}
-        onToggleAll={toggleAll}   allOff={allOff}
+        blockageTitles={blockageTitles} blockageVis={blockageVis} onToggleBlockage={toggleBlockage}
+        onToggleAll={toggleAll}     allOff={allOff}
       />
     </MapContainer>
   );
