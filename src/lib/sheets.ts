@@ -2,7 +2,7 @@ import { Project, StoryPoint, ProjectType, GeoGeometry } from '../types';
 
 // ── Google Apps Script URL (Web App, Execute as: Me, Anyone) ─────────────────
 // POST uses Content-Type: text/plain → no CORS preflight → works directly from browser
-const GAS_URL = ''; // ← הדבק כאן את ה-URL של ה-Web App אחרי פריסה
+const GAS_URL = (import.meta.env.VITE_GAS_URL as string | undefined) ?? '';
 
 // ── Published CSV (read-only, no auth) ───────────────────────────────────────
 const CSV_BASE = (() => {
@@ -85,6 +85,10 @@ export function rowToProject(row: Record<string, unknown>): Project {
     trafficClosureDuration: str(row.trafficClosureDuration) || undefined,
     contractor:             str(row.contractor)             || undefined,
     managementCompany:      str(row.managementCompany)      || undefined,
+    subProject:             str(row.subProject)             || undefined,
+    initiator:              str(row.initiator)              || undefined,
+    representative:         str(row.representative)         || undefined,
+    blockageStatus:         str(row.blockageStatus)         || undefined,
     image:                  str(row.image)                  || undefined,
     notes:                  str(row.notes)                  || undefined,
   };
@@ -104,6 +108,10 @@ export function projectToRow(p: Project): Record<string, string> {
     trafficClosureDuration: p.trafficClosureDuration ?? '',
     contractor:             p.contractor             ?? '',
     managementCompany:      p.managementCompany      ?? '',
+    subProject:             p.subProject             ?? '',
+    initiator:              p.initiator              ?? '',
+    representative:         p.representative         ?? '',
+    blockageStatus:         p.blockageStatus         ?? '',
     image:                  p.image                  ?? '',
     notes:                  p.notes                  ?? '',
     createdAt:              new Date().toISOString(),
