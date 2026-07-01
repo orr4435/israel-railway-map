@@ -32,8 +32,8 @@ function App() {
   useEffect(() => {
     fetchStations();
     fetchSegments();
-    fetchStaticBlockages();
-    if (sheetsEnabled) fetchFromSheets();
+    const sheetsPromise = sheetsEnabled ? fetchFromSheets() : Promise.resolve();
+    sheetsPromise.finally(() => fetchStaticBlockages());
   }, []);
 
   // ── GeoJSON loaders ────────────────────────────────────────────────────────
@@ -113,7 +113,15 @@ function App() {
         loadProjects(),
         loadCustomStations(),
       ]);
-      if (sheetProjects.length > 0) setProjects(sheetProjects);
+      if (sheetProjects.length > 0) {
+        setProjects(prev => {
+          // always keep static blockages (id starts with 'blockage-')
+          const staticBlockages = prev.filter(p => p.id.startsWith('blockage-'));
+          const sheetIds = new Set(sheetProjects.map(p => p.id));
+          const uniqueStatic = staticBlockages.filter(p => !sheetIds.has(p.id));
+          return [...sheetProjects, ...uniqueStatic];
+        });
+      }
       if (sheetStations.length > 0) {
         setPoints(prev => {
           const existingIds = new Set(prev.map(p => p.id));
