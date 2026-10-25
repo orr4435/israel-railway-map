@@ -291,7 +291,7 @@ function App() {
             {useDb && (userEmail ? (
               <button onClick={() => db.signOut()} title={`מחובר: ${userEmail}${editor ? ' (עורך)' : ''}`}
                 className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 rounded-lg hover:bg-gray-100">
-                <LogOut className="w-4 h-4" /><span className="hidden md:inline max-w-[10rem] truncate" dir="ltr">{userEmail}</span>
+                <LogOut className="w-4 h-4" /><span className="hidden md:inline max-w-[10rem] truncate" dir="ltr">{userEmail.replace(`@${db.USERNAME_DOMAIN}`, "")}</span>
               </button>
             ) : (
               <button onClick={() => setLogin({})}

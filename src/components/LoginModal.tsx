@@ -32,13 +32,14 @@ export function LoginModal({ reason, onClose, onSignedIn }: Props) {
         </div>
         {reason && <p className="text-sm text-gray-600 bg-blue-50 border border-blue-100 rounded-lg p-2">{reason}</p>}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">אימייל</label>
-          <input type="email" required autoFocus value={email} onChange={e => setEmail(e.target.value)} dir="ltr"
+          <label className="block text-sm font-medium text-gray-700 mb-1">שם משתמש או אימייל</label>
+          <input type="text" required autoFocus autoComplete="username" value={email} onChange={e => setEmail(e.target.value)} dir="ltr"
+            placeholder="maor"
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">סיסמה</label>
-          <input type="password" required value={password} onChange={e => setPassword(e.target.value)} dir="ltr"
+          <input type="password" required autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} dir="ltr"
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
         {error && <p className="text-sm text-red-600">{error}</p>}

@@ -164,8 +164,15 @@ export function onAuthChange(cb: (session: Session | null) => void): () => void 
   return () => data.subscription.unsubscribe();
 }
 
-export async function signIn(email: string, password: string): Promise<void> {
-  const { error } = await client().auth.signInWithPassword({ email: email.trim(), password });
+/** Editors may sign in with a short username: "maor" means maor@vonomap.app. */
+export const USERNAME_DOMAIN = 'vonomap.app';
+export function toLoginEmail(userOrEmail: string): string {
+  const v = userOrEmail.trim().toLowerCase();
+  return v.includes('@') ? v : `${v}@${USERNAME_DOMAIN}`;
+}
+
+export async function signIn(userOrEmail: string, password: string): Promise<void> {
+  const { error } = await client().auth.signInWithPassword({ email: toLoginEmail(userOrEmail), password });
   if (error) throw new Error(/invalid login/i.test(error.message) ? 'אימייל או סיסמה שגויים' : error.message);
 }
 
