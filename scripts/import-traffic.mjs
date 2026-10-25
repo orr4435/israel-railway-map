@@ -10,20 +10,27 @@
  * - Converts every date format (Excel dates, 27.6.26, 15/07/2026) to yyyy-mm-dd.
  * - Places each arrangement on the station named in "מיקום" (from public/station.geojson).
  *
- * Output: a CSV whose columns match the sheet. In Google Sheets, delete the old
- * הסדרי_תנועה rows of the "projects" tab and paste or import the new rows.
+ * Output:
+ *   --out file.csv   a CSV whose columns match the old Google Sheet (default traffic_import.csv)
+ *   --sql file.sql   SQL for Supabase: paste it into Supabase > SQL Editor and run it.
+ *                    Rows are upserted by id; add --replace to delete every existing
+ *                    traffic arrangement first, so the table holds exactly the Excel rows.
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import * as XLSX from 'xlsx';
 
 XLSX.set_fs(fs);
 
 const args = process.argv.slice(2);
 const opt = (name, def) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : def; };
-const file = args.find((a, i) => !a.startsWith('--') && !(i > 0 && args[i - 1].startsWith('--')));
-if (!file) { console.error('usage: node scripts/import-traffic.mjs <file.xlsx> [--sheet name] [--out file.csv]'); process.exit(1); }
+const VALUE_OPTS = ['--sheet', '--out', '--sql'];
+const file = args.find((a, i) => !a.startsWith('--') && !(i > 0 && VALUE_OPTS.includes(args[i - 1])));
+if (!file) { console.error('usage: node scripts/import-traffic.mjs <file.xlsx> [--sheet name] [--out file.csv] [--sql file.sql [--replace]]'); process.exit(1); }
 const outFile = opt('--out', 'traffic_import.csv');
+const sqlFile = opt('--sql', '');
+const replace = args.includes('--replace');
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..');
 
 // ── column names ─────────────────────────────────────────────────────────────
@@ -113,12 +120,56 @@ for (const row of grid.slice(headerIdx + 1)) {
     else report.unlocated.push(`${rec.title}${rec.locationName ? ` (מיקום: ${rec.locationName})` : ' (אין מיקום)'}`);
   } else report.located++;
   if (!rec.trafficClosureDate) report.noEnd.push(rec.title);
-  out.push({ ...rec, id: `xls-${out.length + 1}`, projectType: 'הסדרי_תנועה', createdAt: new Date().toISOString() });
+  // Stable id from name + location: importing an updated Excel updates the same rows instead of duplicating them
+  const key = `${normName(rec.title)}|${normName(rec.locationName ?? '')}`;
+  let id = `xls-${crypto.createHash('sha1').update(key).digest('hex').slice(0, 10)}`;
+  while (out.some(r => r.id === id)) id += 'b';
+  out.push({ ...rec, id, projectType: 'הסדרי_תנועה', createdAt: new Date().toISOString() });
 }
 
 const csvCell = v => { const s = String(v ?? ''); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
 const csv = [SHEET_HEADERS.join(','), ...out.map(r => SHEET_HEADERS.map(h => csvCell(r[h])).join(','))].join('\r\n');
 fs.writeFileSync(outFile, '﻿' + csv, 'utf8');
+
+// ── SQL for Supabase ─────────────────────────────────────────────────────────
+if (sqlFile) {
+  const q = v => (v === undefined || v === null || String(v).trim() === '') ? 'null'
+    : typeof v === 'number' ? String(v) : `'${String(v).trim().replace(/'/g, "''")}'`;
+  const isoOk = v => /^\d{4}-\d{2}-\d{2}$/.test(v ?? '');
+  const dateNotes = [];
+  const COLS = ['id', 'title', 'project_type', 'lat', 'lng', 'traffic_purpose', 'traffic_start_date', 'traffic_end_date',
+    'traffic_closure_duration', 'location_name', 'contacts', 'initiator', 'contractor', 'management_company', 'notes'];
+  const values = out.map(r => {
+    // a date column only accepts real dates; free text (for example "עד הפעלת התחנה") is kept in the notes
+    const extra = [];
+    if (r.trafficStartDate && !isoOk(r.trafficStartDate)) extra.push(`תאריך התחלה במקור: ${r.trafficStartDate}`);
+    if (r.trafficClosureDate && !isoOk(r.trafficClosureDate)) extra.push(`תאריך סיום במקור: ${r.trafficClosureDate}`);
+    if (extra.length) dateNotes.push(r.title);
+    const row = {
+      id: r.id, title: r.title, project_type: 'הסדרי_תנועה',
+      lat: r.lat === undefined || r.lat === '' ? null : Number(r.lat), lng: r.lng === undefined || r.lng === '' ? null : Number(r.lng),
+      traffic_purpose: r.trafficPurpose, traffic_start_date: isoOk(r.trafficStartDate) ? r.trafficStartDate : null,
+      traffic_end_date: isoOk(r.trafficClosureDate) ? r.trafficClosureDate : null, traffic_closure_duration: r.trafficClosureDuration,
+      location_name: r.locationName, contacts: r.contacts, initiator: r.initiator, contractor: r.contractor,
+      management_company: r.managementCompany, notes: [r.notes, ...extra].filter(Boolean).join('\n'),
+    };
+    return `  (${COLS.map(c => q(row[c])).join(', ')})`;
+  });
+  const sql = [
+    `-- Traffic arrangements imported from ${path.basename(file)} on ${new Date().toISOString().slice(0, 10)}.`,
+    '-- Paste into Supabase > SQL Editor and run. Everything runs as one transaction.',
+    'begin;',
+    replace ? "delete from public.projects where project_type = 'הסדרי_תנועה';" : '-- (run the importer with --replace to remove arrangements that are not in this file)',
+    `insert into public.projects (${COLS.join(', ')}) values`,
+    values.join(',\n'),
+    'on conflict (id) do update set',
+    COLS.filter(c => c !== 'id').map(c => `  ${c} = excluded.${c}`).join(',\n') + ';',
+    'commit;', '',
+  ].join('\n');
+  fs.writeFileSync(sqlFile, sql, 'utf8');
+  console.log(`SQL for Supabase written to ${sqlFile}${replace ? ' (replaces all existing traffic arrangements)' : ''}`);
+  if (dateNotes.length) console.log(`dates that are not real dates were moved to the notes: ${dateNotes.join(', ')}`);
+}
 
 console.log(`sheet "${sheetName}", header row ${headerIdx + 1}`);
 console.log(`columns used: ${header.filter((_, i) => colFields[i]).map((h, i) => h).join(', ')}`);

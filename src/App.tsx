@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Map } from './components/Map';
 import { StoryPanel } from './components/StoryPanel';
 import { StoryPoint, Project, RailSegment } from './types';
-import { Plus, Maximize2, Minimize2, CloudOff, Cloud, Loader2 } from 'lucide-react';
+import { Plus, Maximize2, Minimize2, CloudOff, Cloud, Loader2, Database, LogIn, LogOut } from 'lucide-react';
 import { AddStationForm } from './components/AddStationForm';
 import { AddProjectForm } from './components/AddProjectForm';
 import {
@@ -11,6 +11,8 @@ import {
   loadCustomStations, saveStation,
   diagnoseSheets, type SheetsDiag,
 } from './lib/sheets';
+import * as db from './lib/db';
+import { LoginModal } from './components/LoginModal';
 import { resolveTrafficLocations } from './lib/traffic';
 
 type SyncStatus = 'idle' | 'loading' | 'ok' | 'error';
@@ -30,12 +32,38 @@ function App() {
   const [syncStatus,    setSyncStatus]    = useState<SyncStatus>('idle');
   const [diag,          setDiag]          = useState<SheetsDiag | null>(null);
 
+  // Supabase is the data source when it is configured; Google Sheets stays as the fallback
+  const useDb = db.supabaseEnabled;
+  const [userEmail,  setUserEmail]  = useState<string | null>(null);
+  const [editor,     setEditor]     = useState(false);
+  const [login,      setLogin]      = useState<{ reason?: string; then?: () => void } | null>(null);
+
+  useEffect(() => {
+    if (!useDb) return;
+    const apply = async (email: string | null) => {
+      setUserEmail(email);
+      setEditor(email ? await db.isEditor() : false);
+    };
+    db.getSession().then(s => apply(s?.user.email ?? null));
+    return db.onAuthChange(s => { apply(s?.user.email ?? null); });
+  }, [useDb]);
+
+  /** Runs an editing action, asking the user to sign in first when needed. */
+  const requireEditor = (action: () => void) => {
+    if (!useDb || editor) { action(); return; }
+    setLogin({
+      reason: userEmail ? `המשתמש ${userEmail} אינו מוגדר כעורך. יש להתחבר עם משתמש עורך.` : 'כדי להוסיף או לערוך יש להתחבר כעורך.',
+      then: action,
+    });
+  };
+
   // Traffic arrangements without coordinates are placed on the station named in their "מיקום" field
   const resolvedProjects = useMemo(() => resolveTrafficLocations(projects, points), [projects, points]);
 
   useEffect(() => {
     fetchStations();
     fetchSegments();
+    if (db.supabaseEnabled) { fetchFromDb(); return; }   // blockages live in the database too
     const sheetsPromise = sheetsEnabled ? fetchFromSheets() : Promise.resolve();
     sheetsPromise.finally(() => fetchStaticBlockages());
   }, []);
@@ -108,6 +136,26 @@ function App() {
     } catch { /* silent — static file missing is not critical */ }
   };
 
+  // ── Supabase ───────────────────────────────────────────────────────────────
+
+  const fetchFromDb = async () => {
+    setSyncStatus('loading');
+    try {
+      const [dbProjects, dbStations] = await Promise.all([db.loadProjects(), db.loadCustomStations()]);
+      setProjects(dbProjects);
+      if (dbStations.length > 0) {
+        setPoints(prev => {
+          const existingIds = new Set(prev.map(p => p.id));
+          return [...prev, ...dbStations.filter(s => !existingIds.has(s.id))];
+        });
+      }
+      setSyncStatus('ok');
+    } catch (e) {
+      setSyncStatus('error');
+      setError(`שגיאה בטעינת הנתונים: ${e instanceof Error ? e.message : e}`);
+    }
+  };
+
   // ── Google Sheets sync ─────────────────────────────────────────────────────
 
   const fetchFromSheets = async () => {
@@ -142,6 +190,14 @@ function App() {
   // ── Add handlers ───────────────────────────────────────────────────────────
 
   const handleAddStation = async (s: Omit<StoryPoint, 'id'>) => {
+    if (useDb) {
+      setShowAddStation(false);
+      try {
+        const saved = await db.saveStation(s);
+        setPoints(prev => [...prev, saved]); setActivePoint(saved); setSyncStatus('ok');
+      } catch (e) { setSyncStatus('error'); setError(`שגיאה בשמירת תחנה: ${e instanceof Error ? e.message : e}`); }
+      return;
+    }
     const p: StoryPoint = { ...s, id: `local-${Date.now()}` };
     setPoints(prev => [...prev, p]);
     setActivePoint(p);
@@ -153,6 +209,14 @@ function App() {
   };
 
   const handleAddProject = async (s: Omit<Project, 'id'>) => {
+    if (useDb) {
+      setShowAddProject(false);
+      try {
+        const saved = await db.saveProject(s);
+        setProjects(prev => [...prev, saved]); setActiveProject(saved); setSyncStatus('ok');
+      } catch (e) { setSyncStatus('error'); setError(`שגיאה בשמירה: ${e instanceof Error ? e.message : e}`); }
+      return;
+    }
     const p: Project = { ...s, id: `proj-${Date.now()}` };
     setProjects(prev => [...prev, p]);
     setActiveProject(p);
@@ -194,12 +258,14 @@ function App() {
     const { icon, cls } = map[syncStatus];
     return (
       <div className="flex items-center gap-1">
-        <button onClick={fetchFromSheets} title="רענן מ-Sheets"
+        <button onClick={useDb ? fetchFromDb : fetchFromSheets} title={useDb ? 'רענן ממסד הנתונים' : 'רענן מ-Sheets'}
           className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-colors ${cls} hover:bg-gray-100`}>
-          {icon}<span className="hidden sm:inline">Sheets</span>
+          {useDb && syncStatus === 'ok' ? <Database size={14} /> : icon}<span className="hidden sm:inline">{useDb ? 'מסד נתונים' : 'Sheets'}</span>
         </button>
-        <button onClick={runDiag} title="אבחן חיבור ל-Sheets"
-          className="px-1.5 py-1 rounded text-xs text-gray-400 hover:bg-gray-100 hover:text-gray-700">🔍</button>
+        {!useDb && (
+          <button onClick={runDiag} title="אבחן חיבור ל-Sheets"
+            className="px-1.5 py-1 rounded text-xs text-gray-400 hover:bg-gray-100 hover:text-gray-700">🔍</button>
+        )}
       </div>
     );
   };
@@ -222,11 +288,22 @@ function App() {
           </div>
           <div className="flex items-center gap-2">
             <SyncBadge />
-            <button onClick={() => setShowAddStation(true)}
+            {useDb && (userEmail ? (
+              <button onClick={() => db.signOut()} title={`מחובר: ${userEmail}${editor ? ' (עורך)' : ''}`}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 rounded-lg hover:bg-gray-100">
+                <LogOut className="w-4 h-4" /><span className="hidden md:inline max-w-[10rem] truncate" dir="ltr">{userEmail}</span>
+              </button>
+            ) : (
+              <button onClick={() => setLogin({})}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 rounded-lg hover:bg-gray-100">
+                <LogIn className="w-4 h-4" /> כניסה
+              </button>
+            ))}
+            <button onClick={() => requireEditor(() => setShowAddStation(true))}
               className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium">
               <Plus className="w-4 h-4" /> הוסף תחנה
             </button>
-            <button onClick={() => setShowAddProject(true)}
+            <button onClick={() => requireEditor(() => setShowAddProject(true))}
               className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium">
               <Plus className="w-4 h-4" /> הוסף פרויקט
             </button>
@@ -268,6 +345,15 @@ function App() {
         </div>
       </div>
 
+      {login && (
+        <LoginModal reason={login.reason} onClose={() => setLogin(null)}
+          onSignedIn={async () => {
+            const ok = await db.isEditor();
+            setEditor(ok);
+            if (ok) { const then = login.then; setLogin(null); then?.(); }
+            else setLogin({ reason: 'ההתחברות הצליחה, אבל המשתמש אינו מוגדר כעורך. פנה למנהל המערכת.' });
+          }} />
+      )}
       {showAddStation && <AddStationForm onSubmit={handleAddStation} onClose={() => setShowAddStation(false)} />}
       {showAddProject && <AddProjectForm onSubmit={handleAddProject} onClose={() => setShowAddProject(false)} />}
 
