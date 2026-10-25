@@ -1,7 +1,9 @@
 import { useState } from 'react';
-import { StoryPoint, Project, RailSegment, getStatusStyle, getSegmentStyle, PROJECT_TYPES } from '../types';
-import { ExternalLink, MapPin, FileText, LayoutDashboard, Calendar, DollarSign, Train, ChevronRight, ChevronLeft, Clock, Wrench, Building2, Maximize2, X } from 'lucide-react';
+import { StoryPoint, Project, RailSegment, getStatusStyle, getSegmentStyle } from '../types';
+import { ExternalLink, MapPin, LayoutDashboard, Train, ChevronRight, ChevronLeft, Maximize2, X, TrafficCone } from 'lucide-react';
 import { Dashboard } from './Dashboard';
+import { TrafficTab } from './TrafficTab';
+import { isTraffic } from '../lib/traffic';
 import { toDirectImageUrl } from '../lib/image';
 
 interface Props {
@@ -14,7 +16,6 @@ interface Props {
 type Tab = 'stations' | 'rail' | 'projects' | 'dashboard';
 
 const PAGE_RAIL = 10;
-const PAGE_PROJ = 8;
 const PAGE_STN  = 15;
 
 function Pagination({ page, total, perPage, onPage }: {
@@ -45,14 +46,12 @@ function Pagination({ page, total, perPage, onPage }: {
 export function StoryPanel({ points, activePoint, onPointSelect, projects, activeProject, onProjectSelect, segments, activeSegment, onSegmentSelect, isExpanded }: Props) {
   const [tab,      setTab]      = useState<Tab>('stations');
   const [railPage, setRailPage] = useState(1);
-  const [projPage, setProjPage] = useState(1);
   const [stnPage,  setStnPage]  = useState(1);
   const [lightbox, setLightbox] = useState<{ src: string; title: string } | null>(null);
 
   const switchTab = (t: Tab) => {
     setTab(t);
     setRailPage(1);
-    setProjPage(1);
     setStnPage(1);
   };
 
@@ -60,10 +59,12 @@ export function StoryPanel({ points, activePoint, onPointSelect, projects, activ
   const activeRailIdx = segments.findIndex(s => s.id === activeSegment?.id);
   const activeRailPage = activeRailIdx >= 0 ? Math.ceil((activeRailIdx + 1) / PAGE_RAIL) : railPage;
 
+  const trafficList = projects.filter(isTraffic);
+
   const tabs: { key: Tab; label: string; icon: React.ReactNode; accent: string; count?: number }[] = [
     { key: 'stations',  label: 'תחנות',    icon: <MapPin size={13} />,           accent: 'blue',   count: points.length },
     { key: 'rail',      label: 'מסילות',   icon: <Train size={13} />,            accent: 'indigo', count: segments.length },
-    { key: 'projects',  label: 'פרויקטים', icon: <FileText size={13} />,         accent: 'green',  count: projects.length },
+    { key: 'projects',  label: 'הסדרי תנועה', icon: <TrafficCone size={13} />,  accent: 'red',    count: trafficList.length },
     { key: 'dashboard', label: 'דשבורד',   icon: <LayoutDashboard size={13} />,  accent: 'violet' },
   ];
 
@@ -71,13 +72,13 @@ export function StoryPanel({ points, activePoint, onPointSelect, projects, activ
     blue:   { border: 'border-blue-600',   text: 'text-blue-600',   badge: 'bg-blue-100 text-blue-700' },
     indigo: { border: 'border-indigo-600', text: 'text-indigo-600', badge: 'bg-indigo-100 text-indigo-700' },
     green:  { border: 'border-green-600',  text: 'text-green-600',  badge: 'bg-green-100 text-green-700' },
+    red:    { border: 'border-red-600',    text: 'text-red-600',    badge: 'bg-red-100 text-red-700' },
     violet: { border: 'border-violet-600', text: 'text-violet-600', badge: '' },
   };
 
   // Pagination slices
   const stnSlice  = points.slice((stnPage - 1) * PAGE_STN,  stnPage  * PAGE_STN);
   const railSlice = segments.slice((activeRailPage - 1) * PAGE_RAIL, activeRailPage * PAGE_RAIL);
-  const projSlice = projects.slice((projPage - 1) * PAGE_PROJ, projPage * PAGE_PROJ);
 
   return (
     <div className="flex flex-col h-full bg-white" dir="rtl">
@@ -186,159 +187,9 @@ export function StoryPanel({ points, activePoint, onPointSelect, projects, activ
         </div>
       )}
 
-      {/* ── פרויקטים ── */}
+      {/* ── הסדרי תנועה ── */}
       {tab === 'projects' && (
-        <div className="flex flex-col flex-1 overflow-hidden">
-          <div className="flex-1 overflow-y-auto p-3">
-            {projects.length === 0 ? (
-              <div className="text-center mt-12 text-gray-400">
-                <FileText size={40} className="mx-auto mb-3 opacity-25" />
-                <p className="text-sm">אין פרויקטים עדיין</p>
-                <p className="text-xs mt-1">לחץ על "הוסף פרויקט" בכותרת</p>
-              </div>
-            ) : projSlice.map(project => {
-              const act       = activeProject?.id === project.id;
-              const typeInfo  = PROJECT_TYPES.find(t => t.type === project.projectType);
-              const typeClr   = typeInfo?.color ?? '#16a34a';
-              const isTraffic  = project.projectType === 'הסדרי_תנועה';
-              const isBlockage = project.projectType === 'שדרוג_תשתית';
-              const cardH     = (isTraffic || isBlockage) ? 'h-[96px]' : 'h-[86px]';
-              return (
-                <div key={project.id} onClick={() => onProjectSelect(project)}
-                  className={`mb-2 rounded-xl cursor-pointer transition-all duration-200 border-2 overflow-hidden ${act ? 'shadow-sm' : 'border-transparent bg-gray-50 hover:bg-gray-100'}`}
-                  style={act ? { borderColor: typeClr, background: typeClr + '11' } : {}}>
-
-                  <div className="flex">
-                    {/* ── Thumbnail (click to enlarge) ── */}
-                    {project.image && (
-                      <button
-                        type="button"
-                        onClick={e => { e.stopPropagation(); setLightbox({ src: toDirectImageUrl(project.image!), title: project.title }); }}
-                        className={`relative shrink-0 group ${isExpanded ? 'w-28' : 'w-20'} ${cardH}`}
-                        title="הגדל תמונה">
-                        <img
-                          src={toDirectImageUrl(project.image)}
-                          alt={project.title}
-                          className="w-full h-full object-cover"
-                          onError={e => { (e.currentTarget.parentElement as HTMLElement).style.display = 'none'; }}
-                        />
-                        <span className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-colors">
-                          <Maximize2 size={16} className="text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow" />
-                        </span>
-                      </button>
-                    )}
-
-                    {isTraffic ? (
-                      /* ── Traffic card ── */
-                      <div className={`p-3 ${cardH} flex-1 min-w-0 flex flex-col justify-between`}>
-                        <div className="flex items-start justify-between gap-2">
-                          <h3 className="font-bold text-gray-800 text-sm line-clamp-1">{project.title}</h3>
-                          <span className="shrink-0 text-[10px] font-bold rounded-full px-2 py-0.5"
-                            style={{ background: typeClr + '22', color: typeClr }}>
-                            {typeInfo?.icon} {typeInfo?.label}
-                          </span>
-                        </div>
-                        {project.trafficPurpose && (
-                          <div className="text-xs text-gray-600 line-clamp-1">
-                            <span className="text-gray-400">מטרה: </span>{project.trafficPurpose}
-                          </div>
-                        )}
-                        <div className="flex items-center gap-3 text-xs text-gray-500 flex-wrap">
-                          {project.trafficClosureDate && (
-                            <span className="flex items-center gap-1">
-                              <Calendar size={10} className="text-red-400" />{project.trafficClosureDate}
-                            </span>
-                          )}
-                          {project.trafficClosureDuration && (
-                            <span className="flex items-center gap-1">
-                              <Clock size={10} className="text-red-400" />{project.trafficClosureDuration}
-                            </span>
-                          )}
-                          {project.contractor && (
-                            <span className="flex items-center gap-1">
-                              <Wrench size={10} className="text-gray-400" />{project.contractor}
-                            </span>
-                          )}
-                          {project.managementCompany && (
-                            <span className="flex items-center gap-1">
-                              <Building2 size={10} className="text-gray-400" />{project.managementCompany}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    ) : isBlockage ? (
-                      /* ── Blockage card ── */
-                      <div className={`p-3 ${cardH} flex-1 min-w-0 flex flex-col justify-between`}>
-                        <div className="flex items-start justify-between gap-2">
-                          <h3 className="font-bold text-gray-800 text-sm line-clamp-1">{project.title}</h3>
-                          <span className="shrink-0 text-[10px] font-bold rounded-full px-2 py-0.5"
-                            style={{ background: typeClr + '22', color: typeClr }}>
-                            {typeInfo?.icon} {typeInfo?.label}
-                          </span>
-                        </div>
-                        {project.subProject && (
-                          <div className="text-xs text-gray-600 line-clamp-1">
-                            <span className="text-gray-400">תת פרויקט: </span>{project.subProject}
-                          </div>
-                        )}
-                        <div className="flex items-center gap-3 text-xs text-gray-500 flex-wrap">
-                          {project.initiator && (
-                            <span className="flex items-center gap-1">
-                              <Building2 size={10} className="text-gray-400" />{project.initiator}
-                            </span>
-                          )}
-                          {project.representative && (
-                            <span className="flex items-center gap-1">
-                              <Wrench size={10} className="text-gray-400" />{project.representative}
-                            </span>
-                          )}
-                          {project.managementCompany && (
-                            <span className="flex items-center gap-1">
-                              <Building2 size={10} className="text-gray-400" />{project.managementCompany}
-                            </span>
-                          )}
-                          {project.blockageStatus && (
-                            <span className="font-semibold" style={{ color: typeClr }}>{project.blockageStatus}</span>
-                          )}
-                        </div>
-                      </div>
-                    ) : (
-                      /* ── Regular project card ── */
-                      <div className={`p-3 ${cardH} flex-1 min-w-0 flex flex-col justify-between`}>
-                        <div className="flex items-start justify-between gap-2">
-                          <h3 className="font-bold text-gray-800 text-sm line-clamp-1">{project.title}</h3>
-                          <span className="shrink-0 text-[10px] font-bold rounded-full px-2 py-0.5"
-                            style={{ background: typeClr + '22', color: typeClr }}>
-                            {project.targetYear}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs">
-                          {typeInfo && (
-                            <span className="flex items-center gap-1 font-medium" style={{ color: typeClr }}>
-                              {typeInfo.icon} {typeInfo.label}
-                            </span>
-                          )}
-                          {project.cost && (
-                            <span className="flex items-center gap-1 text-gray-500">
-                              <DollarSign size={10} className="text-gray-400" />{project.cost}
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-xs text-gray-400">
-                          {project.notes
-                            ? <span className="line-clamp-1">{project.notes}</span>
-                            : <span className="flex items-center gap-1"><Calendar size={10} />שנת יעד: {project.targetYear}</span>
-                          }
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          <Pagination page={projPage} total={projects.length} perPage={PAGE_PROJ} onPage={setProjPage} />
-        </div>
+        <TrafficTab arrangements={trafficList} activeProject={activeProject} onSelect={onProjectSelect} isExpanded={isExpanded} />
       )}
 
       {/* ── דשבורד ── */}

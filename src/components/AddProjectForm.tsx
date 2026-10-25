@@ -3,6 +3,7 @@ import { Project, PROJECT_TYPES, ProjectType, GeoGeometry, locationFromGeometry 
 import { X, Image as ImageIcon, AlertTriangle } from 'lucide-react';
 import { GeoPickerMap } from './GeoPickerMap';
 import { toDirectImageUrl, isUnsupportedImageUrl } from '../lib/image';
+import { parseDate } from '../lib/traffic';
 
 interface AddProjectFormProps {
   onSubmit: (project: Omit<Project, 'id'>) => void;
@@ -31,7 +32,11 @@ export function AddProjectForm({ onSubmit, onClose }: AddProjectFormProps) {
 
   // traffic-arrangement fields
   const [trafficPurpose,         setTrafficPurpose]         = useState('');
+  const [trafficStartDate,       setTrafficStartDate]       = useState('');
   const [trafficClosureDate,     setTrafficClosureDate]     = useState('');
+  const [locationName,           setLocationName]           = useState('');
+  const [trafficInitiator,       setTrafficInitiator]       = useState('');
+  const [contacts,               setContacts]               = useState('');
   const [trafficClosureDuration, setTrafficClosureDuration] = useState('');
   const [contractor,             setContractor]             = useState('');
   const [managementCompany,      setManagementCompany]      = useState('');
@@ -52,7 +57,14 @@ export function AddProjectForm({ onSubmit, onClose }: AddProjectFormProps) {
     setGeometry(null);
   };
 
+  // a traffic arrangement may be placed by its station/location name instead of a point on the map
+  const placedByName = isTraffic && !geometry && !!locationName.trim();
+  const datesInvalid = isTraffic && !!trafficStartDate && !!trafficClosureDate &&
+    (parseDate(trafficClosureDate)?.getTime() ?? 0) < (parseDate(trafficStartDate)?.getTime() ?? 0);
+
   const validate = () => {
+    if (datesInvalid) return false;
+    if (placedByName) return true;
     if (!geometry) return false;
     if (geometry.type === 'LineString' && geometry.coordinates.length < 2) return false;
     if (!isTraffic && !isBlockage && (!targetYear.trim() || !cost.trim())) return false;
@@ -64,12 +76,12 @@ export function AddProjectForm({ onSubmit, onClose }: AddProjectFormProps) {
     setSubmitted(true);
     if (!validate()) return;
 
-    const location = locationFromGeometry(geometry!);
+    const location = geometry ? locationFromGeometry(geometry) : { lat: 0, lng: 0 };
     onSubmit({
       title,
       projectType,
       location,
-      geometry: geometry!,
+      geometry: geometry ?? undefined,
       image: image || undefined,
       notes: notes || undefined,
       // regular fields (empty for traffic/blockage)
@@ -77,13 +89,16 @@ export function AddProjectForm({ onSubmit, onClose }: AddProjectFormProps) {
       cost:       isTraffic || isBlockage ? undefined : cost,
       // traffic fields (undefined for non-traffic)
       trafficPurpose:         isTraffic ? (trafficPurpose         || undefined) : undefined,
+      trafficStartDate:       isTraffic ? (trafficStartDate       || undefined) : undefined,
       trafficClosureDate:     isTraffic ? (trafficClosureDate     || undefined) : undefined,
+      locationName:           isTraffic ? (locationName.trim()    || undefined) : undefined,
+      contacts:               isTraffic ? (contacts.trim()        || undefined) : undefined,
       trafficClosureDuration: isTraffic ? (trafficClosureDuration || undefined) : undefined,
       contractor:             isTraffic ? (contractor             || undefined) : undefined,
       managementCompany:      (isTraffic || isBlockage) ? (managementCompany || undefined) : undefined,
       // blockage fields (undefined for non-blockage)
       subProject:     isBlockage ? (subProject     || undefined) : undefined,
-      initiator:      isBlockage ? (initiator      || undefined) : undefined,
+      initiator:      isBlockage ? (initiator || undefined) : isTraffic ? (trafficInitiator.trim() || undefined) : undefined,
       representative: isBlockage ? (representative || undefined) : undefined,
       blockageStatus: isBlockage ? (blockageStatus || undefined) : undefined,
     });
@@ -158,20 +173,52 @@ export function AddProjectForm({ onSubmit, onClose }: AddProjectFormProps) {
                   className={`${inputCls()} resize-none`} />
               </div>
 
-              {/* מועד + משך סגירה */}
-              <div className="grid grid-cols-2 gap-4">
+              {/* תאריכים + משך */}
+              <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">מועד סגירה משוער</label>
-                  <input type="text" value={trafficClosureDate} onChange={e => setTrafficClosureDate(e.target.value)}
-                    placeholder="לדוגמה: 15/07/2026"
+                  <label className="block text-sm font-medium text-gray-700 mb-1">תאריך התחלה</label>
+                  <input type="date" value={trafficStartDate} onChange={e => setTrafficStartDate(e.target.value)}
                     className={inputCls()} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">תאריך סיום</label>
+                  <input type="date" value={trafficClosureDate} onChange={e => setTrafficClosureDate(e.target.value)}
+                    className={inputCls(datesInvalid ? 'focus:ring-red-500' : undefined)} />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">משך סגירה משוער</label>
                   <input type="text" value={trafficClosureDuration} onChange={e => setTrafficClosureDuration(e.target.value)}
-                    placeholder="לדוגמה: 3 ימים, שבועיים"
+                    placeholder="לדוגמה: 3 ימים"
                     className={inputCls()} />
                 </div>
+              </div>
+              {datesInvalid && <p className="text-xs text-red-600 -mt-2">תאריך הסיום מוקדם מתאריך ההתחלה</p>}
+              {isTraffic && !trafficClosureDate && (
+                <p className="text-xs text-yellow-700 -mt-2">בלי תאריך סיום ההסדר יסומן במפה בתג אזהרה צהוב</p>
+              )}
+
+              {/* מיקום + יזם */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">מיקום (תחנה או אתר)</label>
+                  <input type="text" value={locationName} onChange={e => setLocationName(e.target.value)}
+                    placeholder="לדוגמה: ירושלים - יצחק נבון"
+                    className={inputCls()} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">יזם ההסדר</label>
+                  <input type="text" value={trafficInitiator} onChange={e => setTrafficInitiator(e.target.value)}
+                    placeholder="לדוגמה: נת״י"
+                    className={inputCls()} />
+                </div>
+              </div>
+
+              {/* אנשי קשר */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">אנשי קשר וטלפונים</label>
+                <textarea value={contacts} onChange={e => setContacts(e.target.value)}
+                  rows={2} placeholder="שם, תפקיד, טלפון. איש קשר בכל שורה"
+                  className={`${inputCls()} resize-none`} />
               </div>
 
               {/* קבלן + חברת ניהול */}
@@ -277,9 +324,9 @@ export function AddProjectForm({ onSubmit, onClose }: AddProjectFormProps) {
           {/* ── מיקום גאוגרפי ── */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              מיקום גאוגרפי <span className="text-red-500">*</span>
+              מיקום גאוגרפי {!isTraffic && <span className="text-red-500">*</span>}
               {projectType === 'הקמת_מסילה'   && <span className="mr-2 text-[11px] font-normal text-indigo-500">— שרטט את מסלול המסילה על המפה</span>}
-              {projectType === 'הסדרי_תנועה'  && <span className="mr-2 text-[11px] font-normal text-red-500">— סמן את אזור ההסדר על המפה</span>}
+              {projectType === 'הסדרי_תנועה'  && <span className="mr-2 text-[11px] font-normal text-red-500">— סמן את אזור ההסדר על המפה, או מלא "מיקום" והנקודה תמוקם לפי התחנה</span>}
               {projectType === 'שדרוג_תשתית'  && <span className="mr-2 text-[11px] font-normal text-amber-600">— סמן את מיקום החסם על המפה</span>}
             </label>
             <GeoPickerMap
@@ -287,8 +334,8 @@ export function AddProjectForm({ onSubmit, onClose }: AddProjectFormProps) {
               onModeChange={setDrawMode}
               geometry={geometry}
               onGeometryChange={setGeometry}
-              required
-              touched={submitted}
+              required={!placedByName}
+              touched={submitted && !placedByName}
             />
           </div>
 

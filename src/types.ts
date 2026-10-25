@@ -49,14 +49,19 @@ export interface Project {
 
   // Traffic-arrangement specific fields (used when projectType === 'הסדרי_תנועה')
   trafficPurpose?: string;        // מטרת ההסדר
-  trafficClosureDate?: string;    // מועד סגירה משוער
+  trafficStartDate?: string;      // תאריך התחלה
+  trafficClosureDate?: string;    // תאריך סיום (historically labelled "מועד סגירה משוער")
   trafficClosureDuration?: string;// משך סגירה משוער
+  locationName?: string;          // מיקום: station or place name, places the point when lat/lng are missing
+  contacts?: string;              // אנשי קשר וטלפונים
+  locationSource?: 'coords' | 'station' | 'none';  // computed at load time, not stored
+  matchedStation?: string;                         // computed: station matched from locationName
   contractor?: string;            // קבלן
   managementCompany?: string;     // חברת ניהול (also used for חסמים)
 
   // Blockage-specific fields (used when projectType === 'שדרוג_תשתית')
   subProject?: string;            // תת פרויקט
-  initiator?: string;             // יזם
+  initiator?: string;             // יזם (blockages and traffic arrangements)
   representative?: string;        // נציג
   blockageStatus?: string;        // סטטוס
 

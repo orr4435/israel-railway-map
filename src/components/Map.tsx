@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, GeoJSON as Le
 import 'leaflet/dist/leaflet.css';
 import { StoryPoint, Project, RailSegment, getStatusStyle, getSegmentStyle, STATUS_COLORS, SEGMENT_STATUS_COLORS, PROJECT_TYPES } from '../types';
 import { toDirectImageUrl } from '../lib/image';
+import { TRAFFIC_STATUS, TRAFFIC_STATUS_ORDER, TrafficStatus, getTrafficStatus, formatDate, isTraffic, hasCoords } from '../lib/traffic';
 import L from 'leaflet';
 // ── Icons ─────────────────────────────────────────────────────────────────────
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -61,6 +62,48 @@ function makeProjectIcon(projectType: string | undefined, isActive: boolean): L.
   }
 
   return makeCircleIcon(color, size, isActive);
+}
+
+// Traffic arrangements: a dot coloured by date status; a yellow "!" badge when the end date is missing
+function makeTrafficIcon(status: TrafficStatus, isActive: boolean): L.DivIcon {
+  const color = TRAFFIC_STATUS[status].color;
+  const size  = isActive ? 24 : 18;
+  const ring  = isActive ? pulseRing(color, size) : '';
+  // white border plus a dark outer ring keeps these apart from the (smaller, borderless-ring) station dots
+  const shadow = '0 0 0 1.5px #1f2937, 0 2px 5px rgba(0,0,0,0.45)';
+  const inner = status === 'no_end'
+    ? `<div style="position:relative;width:${size}px;height:${size}px;background:${color};border:2.5px solid white;border-radius:50%;box-shadow:${shadow};display:flex;align-items:center;justify-content:center;color:#422006;font:900 ${Math.round(size * 0.62)}px/1 system-ui,sans-serif">!</div>`
+    : `<div style="position:relative;width:${size}px;height:${size}px;background:${color};border:2.5px solid white;border-radius:50%;box-shadow:${shadow}"></div>`;
+  return L.divIcon({
+    html: `<div style="position:relative;width:${size}px;height:${size}px">${ring}${inner}</div>`,
+    className: '', iconSize: [size, size], iconAnchor: [size / 2, size / 2], popupAnchor: [0, -size / 2 - 4],
+  });
+}
+
+// Legend in the map corner; each row also toggles that status on the map
+function TrafficLegend({ counts, visible, onToggle }: {
+  counts: Record<TrafficStatus, number>; visible: Record<TrafficStatus, boolean>; onToggle: (s: TrafficStatus) => void;
+}) {
+  return (
+    <div className="absolute bottom-6 left-3 bg-white/95 rounded-xl shadow-lg z-[1000] px-3 py-2 text-right" dir="rtl" style={{ minWidth: 190 }}
+      onClick={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}>
+      <p className="text-[11px] font-bold text-gray-500 mb-1.5">🚦 הסדרי תנועה</p>
+      {TRAFFIC_STATUS_ORDER.map(s => {
+        const st = TRAFFIC_STATUS[s], on = visible[s];
+        return (
+          <button key={s} type="button" onClick={() => onToggle(s)} title={on ? 'הסתר במפה' : 'הצג במפה'}
+            className={`w-full flex items-center gap-2 py-0.5 text-xs transition-opacity ${on ? '' : 'opacity-35'}`}>
+            <span style={{ width: 13, height: 13, borderRadius: '50%', background: st.color, border: '2px solid #fff',
+              boxShadow: '0 0 0 1.5px #1f2937', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              color: '#422006', fontSize: 9, fontWeight: 900, flexShrink: 0 }}>{s === 'no_end' ? '!' : ''}</span>
+            <span className="font-medium text-gray-700 whitespace-nowrap">{st.label}</span>
+            <span className="text-gray-400 text-[11px] truncate">{st.legend}</span>
+            <span className="mr-auto text-gray-500 font-semibold pr-2">{counts[s]}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 // ── Fly-to ────────────────────────────────────────────────────────────────────
@@ -246,13 +289,27 @@ export function Map({ points, activePoint, onMarkerClick, projects, activeProjec
     });
   }, [blockageTitles]);
 
+  const [trafficVis, setTrafficVis] = useState<Record<TrafficStatus, boolean>>({ upcoming: true, active: true, ended: true, no_end: true });
+  const trafficStatusOf = useMemo(() => {
+    const m: Record<string, TrafficStatus> = {};
+    projects.filter(isTraffic).forEach(p => { m[p.id] = getTrafficStatus(p); });
+    return m;
+  }, [projects]);
+  const trafficCounts = useMemo(() => {
+    const c: Record<TrafficStatus, number> = { upcoming: 0, active: 0, ended: 0, no_end: 0 };
+    projects.filter(p => isTraffic(p) && hasCoords(p.location)).forEach(p => c[trafficStatusOf[p.id]]++);
+    return c;
+  }, [projects, trafficStatusOf]);
+
   const visibleProjects = useMemo(() =>
     layers.projects
       ? projects.filter(p =>
-          p.projectType !== 'שדרוג_תשתית' || (blockageVis[p.title] ?? true)
+          isTraffic(p)
+            ? hasCoords(p.location) && trafficVis[trafficStatusOf[p.id]]
+            : p.projectType !== 'שדרוג_תשתית' || (blockageVis[p.title] ?? true)
         )
       : [],
-    [projects, layers.projects, blockageVis]
+    [projects, layers.projects, blockageVis, trafficVis, trafficStatusOf]
   );
 
   const segmentCounts = useMemo<Record<string, number>>(() => {
@@ -320,7 +377,9 @@ export function Map({ points, activePoint, onMarkerClick, projects, activeProjec
     });
   };
 
-  const flyTarget = activeSegment?.midpoint ?? activeProject?.location ?? activePoint?.location;
+  const flyTarget = activeSegment?.midpoint
+    ?? (activeProject && hasCoords(activeProject.location) ? activeProject.location : undefined)
+    ?? activePoint?.location;
 
   const visiblePoints = useMemo(
     () => points.filter(p => statusVis[`stn_${p.status}`] ?? false),
@@ -381,7 +440,7 @@ export function Map({ points, activePoint, onMarkerClick, projects, activeProjec
 
       {/* פרויקטים — polyline geometry */}
       {visibleProjects.filter(p => p.geometry?.type === 'LineString').map(project => {
-        const typeClr = projectTypeColor(project.projectType);
+        const typeClr = isTraffic(project) ? TRAFFIC_STATUS[trafficStatusOf[project.id]].color : projectTypeColor(project.projectType);
         const active  = activeProject?.id === project.id;
         const positions = (project.geometry!.coordinates).map(c => [c.lat, c.lng] as [number, number]);
         return (
@@ -401,9 +460,30 @@ export function Map({ points, activePoint, onMarkerClick, projects, activeProjec
         const typeClr  = projectTypeColor(project.projectType);
         return (
           <Marker key={project.id} position={[project.location.lat, project.location.lng]}
-            icon={makeProjectIcon(project.projectType, active)}
+            icon={isTraffic(project) ? makeTrafficIcon(trafficStatusOf[project.id], active) : makeProjectIcon(project.projectType, active)}
+            zIndexOffset={isTraffic(project) ? 500 : 0}
             eventHandlers={{ click: () => onProjectClick(project) }}>
             <Popup>
+              {isTraffic(project) ? (
+                <div dir="rtl" style={{ minWidth: 200, fontFamily: 'inherit' }}>
+                  <strong style={{ display:'block', fontSize:14, marginBottom:4 }}>{project.title}</strong>
+                  <span style={{ display:'inline-block', background: TRAFFIC_STATUS[trafficStatusOf[project.id]].color + '22',
+                    color: trafficStatusOf[project.id] === 'no_end' ? '#854d0e' : TRAFFIC_STATUS[trafficStatusOf[project.id]].color,
+                    border:`1px solid ${TRAFFIC_STATUS[trafficStatusOf[project.id]].color}66`, borderRadius:999, padding:'1px 8px',
+                    fontSize:11, fontWeight:700, marginBottom:6 }}>
+                    {trafficStatusOf[project.id] === 'no_end' ? '⚠ ' : '● '}{TRAFFIC_STATUS[trafficStatusOf[project.id]].label}
+                  </span>
+                  <table style={{ fontSize:12, color:'#444', width:'100%', borderCollapse:'collapse' }}>
+                    <tbody>
+                      <tr><td style={{ color:'#888', padding:'2px 0' }}>תאריך התחלה</td><td style={{ paddingRight:10, fontWeight:600 }}>{formatDate(project.trafficStartDate)}</td></tr>
+                      <tr><td style={{ color:'#888', padding:'2px 0' }}>תאריך סיום</td><td style={{ paddingRight:10, fontWeight:600 }}>{formatDate(project.trafficClosureDate)}</td></tr>
+                      {(project.locationName || project.matchedStation) && (
+                        <tr><td style={{ color:'#888', padding:'2px 0' }}>מיקום</td><td style={{ paddingRight:10, fontWeight:600 }}>{project.locationName || project.matchedStation}</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
               <div dir="rtl" style={{ minWidth: 190, fontFamily: 'inherit' }}>
                 <span style={{ display:'inline-block', background: typeClr + '22', color: typeClr,
                   border:`1px solid ${typeClr}55`, borderRadius:999, padding:'1px 8px',
@@ -444,10 +524,16 @@ export function Map({ points, activePoint, onMarkerClick, projects, activeProjec
                   </table>
                 )}
               </div>
+              )}
             </Popup>
           </Marker>
         );
       })}
+
+      {layers.projects && (
+        <TrafficLegend counts={trafficCounts} visible={trafficVis}
+          onToggle={st => setTrafficVis(v => ({ ...v, [st]: !v[st] }))} />
+      )}
 
       <LayerControlPanel
         layers={layers}             onToggle={toggleLayer}

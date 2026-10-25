@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Map } from './components/Map';
 import { StoryPanel } from './components/StoryPanel';
 import { StoryPoint, Project, RailSegment } from './types';
@@ -11,6 +11,7 @@ import {
   loadCustomStations, saveStation,
   diagnoseSheets, type SheetsDiag,
 } from './lib/sheets';
+import { resolveTrafficLocations } from './lib/traffic';
 
 type SyncStatus = 'idle' | 'loading' | 'ok' | 'error';
 
@@ -28,6 +29,9 @@ function App() {
   const [error,         setError]         = useState<string | null>(null);
   const [syncStatus,    setSyncStatus]    = useState<SyncStatus>('idle');
   const [diag,          setDiag]          = useState<SheetsDiag | null>(null);
+
+  // Traffic arrangements without coordinates are placed on the station named in their "מיקום" field
+  const resolvedProjects = useMemo(() => resolveTrafficLocations(projects, points), [projects, points]);
 
   useEffect(() => {
     fetchStations();
@@ -246,7 +250,7 @@ function App() {
             </button>
             <StoryPanel
               points={points}         activePoint={activePoint}    onPointSelect={selectStation}
-              projects={projects}     activeProject={activeProject} onProjectSelect={selectProject}
+              projects={resolvedProjects} activeProject={activeProject} onProjectSelect={selectProject}
               segments={segments}     activeSegment={activeSegment} onSegmentSelect={selectSegment}
               isExpanded={isExpanded}
             />
@@ -257,7 +261,7 @@ function App() {
         <div className={`relative flex-1 transition-all duration-300 ${isExpanded ? 'w-1/3' : 'w-2/3'}`}>
           <Map
             points={points}         activePoint={activePoint}    onMarkerClick={selectStation}
-            projects={projects}     activeProject={activeProject} onProjectClick={selectProject}
+            projects={resolvedProjects} activeProject={activeProject} onProjectClick={selectProject}
             statusGeoJSON={statusGeoJSON}
             activeSegment={activeSegment}               onSegmentClick={selectSegment}
           />
@@ -296,7 +300,7 @@ function App() {
             ) : (
               <div className="mb-3 text-amber-700 bg-amber-50 rounded p-2 text-xs">
                 <strong>No rows found.</strong> The sheet may be empty or column names don't match.<br/>
-                Expected columns: <span className="font-mono">id, title, projectType, lat, lng, geometry, targetYear, cost, trafficPurpose, trafficClosureDate, trafficClosureDuration, contractor, managementCompany, image, notes, createdAt</span>
+                Expected columns: <span className="font-mono">id, title, projectType, lat, lng, geometry, targetYear, cost, trafficPurpose, trafficStartDate, trafficClosureDate, trafficClosureDuration, locationName, contacts, initiator, contractor, managementCompany, image, notes, createdAt</span>
               </div>
             )}
 

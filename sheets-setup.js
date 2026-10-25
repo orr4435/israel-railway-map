@@ -109,15 +109,18 @@ function updateRow(ws, id, newData) {
 
 // ── One-time setup — run once then deploy ─────────────────────────────────
 
+var PROJECT_HEADERS = [
+  'id', 'title', 'projectType', 'lat', 'lng', 'geometry',
+  'targetYear', 'cost',
+  'trafficPurpose', 'trafficStartDate', 'trafficClosureDate', 'trafficClosureDuration',
+  'locationName', 'contacts', 'initiator',
+  'contractor', 'managementCompany',
+  'image', 'notes', 'createdAt'
+];
+
 function setupSheets() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  createSheet(ss, 'projects', [
-    'id', 'title', 'projectType', 'lat', 'lng', 'geometry',
-    'targetYear', 'cost',
-    'trafficPurpose', 'trafficClosureDate', 'trafficClosureDuration',
-    'contractor', 'managementCompany',
-    'image', 'notes', 'createdAt'
-  ]);
+  createSheet(ss, 'projects', PROJECT_HEADERS);
   createSheet(ss, 'stations', [
     'id', 'title', 'description', 'status', 'lat', 'lng', 'geometry',
     'image', 'linkUrl', 'linkLabel', 'createdAt'
@@ -129,6 +132,17 @@ function setupSheets() {
     'Execute as: Me | Who has access: Anyone\n' +
     'העתק את ה-URL ל-.env כ-VITE_SHEETS_API_URL'
   );
+}
+
+// Run once on an existing sheet: appends any missing columns (for example
+// trafficStartDate, locationName, contacts, initiator) at the end of row 1.
+// addRow/updateRow only write columns that exist as headers.
+function addMissingColumns() {
+  var ws = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('projects');
+  var have = ws.getRange(1, 1, 1, ws.getLastColumn()).getValues()[0];
+  var missing = PROJECT_HEADERS.filter(function(h) { return have.indexOf(h) === -1; });
+  if (missing.length) ws.getRange(1, have.length + 1, 1, missing.length).setValues([missing]);
+  SpreadsheetApp.getUi().alert(missing.length ? 'נוספו עמודות: ' + missing.join(', ') : 'כל העמודות כבר קיימות');
 }
 
 function createSheet(ss, name, headers) {
