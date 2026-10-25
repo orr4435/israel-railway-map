@@ -85,7 +85,7 @@ function TrafficLegend({ counts, visible, onToggle }: {
   counts: Record<TrafficStatus, number>; visible: Record<TrafficStatus, boolean>; onToggle: (s: TrafficStatus) => void;
 }) {
   return (
-    <div className="absolute bottom-6 left-3 bg-white/95 rounded-xl shadow-lg z-[1000] px-3 py-2 text-right" dir="rtl" style={{ minWidth: 190 }}
+    <div className="absolute top-[88px] left-3 bg-white/95 rounded-xl shadow-lg z-[1000] px-3 py-2 text-right" dir="rtl" style={{ minWidth: 190 }}
       onClick={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}>
       <p className="text-[11px] font-bold text-gray-500 mb-1.5">🚦 הסדרי תנועה</p>
       {TRAFFIC_STATUS_ORDER.map(s => {
