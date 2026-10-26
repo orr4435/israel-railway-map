@@ -11,6 +11,9 @@ interface Props {
   projects: Project[];          activeProject?: Project;     onProjectSelect: (p: Project) => void;
   segments: RailSegment[];      activeSegment?: RailSegment; onSegmentSelect: (s: RailSegment) => void;
   isExpanded: boolean;
+  canEdit?: boolean;
+  onEditProject?: (p: Project) => void;
+  onDeleteProject?: (p: Project) => Promise<void> | void;
 }
 
 type Tab = 'stations' | 'rail' | 'projects' | 'dashboard';
@@ -43,7 +46,7 @@ function Pagination({ page, total, perPage, onPage }: {
   );
 }
 
-export function StoryPanel({ points, activePoint, onPointSelect, projects, activeProject, onProjectSelect, segments, activeSegment, onSegmentSelect, isExpanded }: Props) {
+export function StoryPanel({ points, activePoint, onPointSelect, projects, activeProject, onProjectSelect, segments, activeSegment, onSegmentSelect, isExpanded, canEdit, onEditProject, onDeleteProject }: Props) {
   const [tab,      setTab]      = useState<Tab>('stations');
   const [railPage, setRailPage] = useState(1);
   const [stnPage,  setStnPage]  = useState(1);
@@ -189,7 +192,8 @@ export function StoryPanel({ points, activePoint, onPointSelect, projects, activ
 
       {/* ── הסדרי תנועה ── */}
       {tab === 'projects' && (
-        <TrafficTab arrangements={trafficList} activeProject={activeProject} onSelect={onProjectSelect} isExpanded={isExpanded} />
+        <TrafficTab arrangements={trafficList} activeProject={activeProject} onSelect={onProjectSelect} isExpanded={isExpanded}
+          canEdit={canEdit} onEdit={onEditProject} onDelete={onDeleteProject} />
       )}
 
       {/* ── דשבורד ── */}

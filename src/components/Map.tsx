@@ -260,9 +260,28 @@ interface MapProps {
   points: StoryPoint[];         activePoint?: StoryPoint;     onMarkerClick: (p: StoryPoint) => void;
   projects: Project[];          activeProject?: Project;      onProjectClick: (p: Project) => void;
   statusGeoJSON: any;           activeSegment?: RailSegment;  onSegmentClick: (s: RailSegment) => void;
+  canEdit?: boolean;
+  onEditProject?: (p: Project) => void;
+  onDeleteProject?: (p: Project) => Promise<void> | void;
 }
 
-export function Map({ points, activePoint, onMarkerClick, projects, activeProject, onProjectClick, statusGeoJSON, activeSegment, onSegmentClick }: MapProps) {
+// Edit / delete buttons inside a project popup (editors only). Delete needs a second click.
+function PopupActions({ project, onEdit, onDelete }: {
+  project: Project; onEdit?: (p: Project) => void; onDelete?: (p: Project) => Promise<void> | void;
+}) {
+  const [confirm, setConfirm] = useState(false);
+  const btn = { fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 8, border: 'none', cursor: 'pointer' } as const;
+  return (
+    <div dir="rtl" style={{ display: 'flex', gap: 6, marginTop: 8, paddingTop: 8, borderTop: '1px solid #eee' }}>
+      <button style={{ ...btn, background: '#eff6ff', color: '#1d4ed8' }} onClick={() => onEdit?.(project)}>✏️ עריכה</button>
+      {confirm
+        ? <button style={{ ...btn, background: '#dc2626', color: '#fff' }} onClick={() => onDelete?.(project)}>לאשר מחיקה</button>
+        : <button style={{ ...btn, background: '#fef2f2', color: '#b91c1c' }} onClick={() => setConfirm(true)}>🗑 מחיקה</button>}
+    </div>
+  );
+}
+
+export function Map({ points, activePoint, onMarkerClick, projects, activeProject, onProjectClick, statusGeoJSON, activeSegment, onSegmentClick, canEdit, onEditProject, onDeleteProject }: MapProps) {
   const center = { lat: 31.8, lng: 34.9 };
 
   const [layers, setLayers] = useState<LayerState>({ railLines: true, projects: true });
@@ -525,6 +544,7 @@ export function Map({ points, activePoint, onMarkerClick, projects, activeProjec
                 )}
               </div>
               )}
+              {canEdit && <PopupActions project={project} onEdit={onEditProject} onDelete={onDeleteProject} />}
             </Popup>
           </Marker>
         );

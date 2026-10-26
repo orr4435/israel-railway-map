@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useState } from 'react';
-import { Search, ChevronDown, ChevronUp, MapPin, Phone, Building2, StickyNote, Wrench, Clock, Target, AlertTriangle, X } from 'lucide-react';
+import { Search, ChevronDown, ChevronUp, MapPin, Phone, Building2, StickyNote, Wrench, Clock, Target, AlertTriangle, X, Pencil, Trash2 } from 'lucide-react';
 import { Project } from '../types';
 import { TRAFFIC_STATUS, TRAFFIC_STATUS_ORDER, TrafficStatus, getTrafficStatus, formatDate, parseDate } from '../lib/traffic';
 
@@ -8,6 +8,9 @@ interface Props {
   activeProject?: Project;
   onSelect: (p: Project) => void;
   isExpanded: boolean;
+  canEdit?: boolean;                       // editors see edit and delete buttons
+  onEdit?: (p: Project) => void;
+  onDelete?: (p: Project) => Promise<void> | void;
 }
 
 export function StatusBadge({ status, small }: { status: TrafficStatus; small?: boolean }) {
@@ -43,7 +46,8 @@ function Detail({ icon, label, children }: { icon: React.ReactNode; label: strin
   );
 }
 
-export function TrafficTab({ arrangements, activeProject, onSelect, isExpanded }: Props) {
+export function TrafficTab({ arrangements, activeProject, onSelect, isExpanded, canEdit, onEdit, onDelete }: Props) {
+  const [confirmDel, setConfirmDel] = useState<string | null>(null);
   const [query,     setQuery]     = useState('');
   const [statusSet, setStatusSet] = useState<Set<TrafficStatus>>(new Set());
   const [initiator, setInitiator] = useState('');
@@ -194,6 +198,29 @@ export function TrafficTab({ arrangements, activeProject, onSelect, isExpanded }
                               </Detail>
                             )}
                           </div>
+                          {canEdit && (
+                            <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
+                              <button onClick={e => { e.stopPropagation(); onEdit?.(p); }}
+                                className="flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100">
+                                <Pencil size={12} /> עריכה
+                              </button>
+                              {confirmDel === p.id ? (
+                                <>
+                                  <button onClick={async e => { e.stopPropagation(); await onDelete?.(p); setConfirmDel(null); }}
+                                    className="flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg bg-red-600 text-white hover:bg-red-700">
+                                    <Trash2 size={12} /> לאשר מחיקה
+                                  </button>
+                                  <button onClick={e => { e.stopPropagation(); setConfirmDel(null); }}
+                                    className="text-xs px-2 py-1.5 text-gray-500 hover:text-gray-800">ביטול</button>
+                                </>
+                              ) : (
+                                <button onClick={e => { e.stopPropagation(); setConfirmDel(p.id); }}
+                                  className="flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg bg-red-50 text-red-700 hover:bg-red-100">
+                                  <Trash2 size={12} /> מחיקה
+                                </button>
+                              )}
+                            </div>
+                          )}
                         </td>
                       </tr>
                     )}

@@ -3,11 +3,25 @@ import { Project, PROJECT_TYPES, ProjectType, GeoGeometry, locationFromGeometry 
 import { X, Image as ImageIcon, AlertTriangle } from 'lucide-react';
 import { GeoPickerMap } from './GeoPickerMap';
 import { toDirectImageUrl, isUnsupportedImageUrl } from '../lib/image';
-import { parseDate } from '../lib/traffic';
+import { parseDate, toInputDate, hasCoords } from '../lib/traffic';
 
 interface AddProjectFormProps {
   onSubmit: (project: Omit<Project, 'id'>) => void;
   onClose: () => void;
+  initial?: Project;        // edit mode: the form starts filled with this record
+}
+
+/** Keeps a stored value visible in a fixed <select> list even when it is not one of the options. */
+function CurrentOption({ value, known }: { value: string; known: string[] }) {
+  return value && !known.includes(value) ? <option>{value}</option> : null;
+}
+
+/** The record's own geometry, or a point at its own coordinates. A position borrowed from a matched station is not its own. */
+function initialGeometry(p?: Project): GeoGeometry | null {
+  if (!p) return null;
+  if (p.geometry) return p.geometry;
+  if (p.locationSource !== 'station' && hasCoords(p.location)) return { type: 'Point', coordinates: [p.location] };
+  return null;
 }
 
 type DrawMode = 'point' | 'polyline';
@@ -15,37 +29,38 @@ type DrawMode = 'point' | 'polyline';
 const IS_TRAFFIC  = (t: ProjectType) => t === 'הסדרי_תנועה';
 const IS_BLOCKAGE = (t: ProjectType) => t === 'שדרוג_תשתית';
 
-export function AddProjectForm({ onSubmit, onClose }: AddProjectFormProps) {
-  const [projectType, setProjectType] = useState<ProjectType>('אחר');
+export function AddProjectForm({ onSubmit, onClose, initial }: AddProjectFormProps) {
+  const editing = !!initial;
+  const [projectType, setProjectType] = useState<ProjectType>(initial?.projectType ?? 'אחר');
 
   // common fields
-  const [title,     setTitle]     = useState('');
-  const [image,     setImage]     = useState('');
-  const [notes,     setNotes]     = useState('');
-  const [geometry,  setGeometry]  = useState<GeoGeometry | null>(null);
-  const [drawMode,  setDrawMode]  = useState<DrawMode>('point');
+  const [title,     setTitle]     = useState(initial?.title ?? '');
+  const [image,     setImage]     = useState(initial?.image ?? '');
+  const [notes,     setNotes]     = useState(initial?.notes ?? '');
+  const [geometry,  setGeometry]  = useState<GeoGeometry | null>(() => initialGeometry(initial));
+  const [drawMode,  setDrawMode]  = useState<DrawMode>(initial?.geometry?.type === 'LineString' ? 'polyline' : 'point');
   const [submitted, setSubmitted] = useState(false);
 
   // regular project fields
-  const [targetYear, setTargetYear] = useState('');
-  const [cost,       setCost]       = useState('');
+  const [targetYear, setTargetYear] = useState(initial?.targetYear ?? '');
+  const [cost,       setCost]       = useState(initial?.cost ?? '');
 
   // traffic-arrangement fields
-  const [trafficPurpose,         setTrafficPurpose]         = useState('');
-  const [trafficStartDate,       setTrafficStartDate]       = useState('');
-  const [trafficClosureDate,     setTrafficClosureDate]     = useState('');
-  const [locationName,           setLocationName]           = useState('');
-  const [trafficInitiator,       setTrafficInitiator]       = useState('');
-  const [contacts,               setContacts]               = useState('');
-  const [trafficClosureDuration, setTrafficClosureDuration] = useState('');
-  const [contractor,             setContractor]             = useState('');
-  const [managementCompany,      setManagementCompany]      = useState('');
+  const [trafficPurpose,         setTrafficPurpose]         = useState(initial?.trafficPurpose ?? '');
+  const [trafficStartDate,       setTrafficStartDate]       = useState(toInputDate(initial?.trafficStartDate));
+  const [trafficClosureDate,     setTrafficClosureDate]     = useState(toInputDate(initial?.trafficClosureDate));
+  const [locationName,           setLocationName]           = useState(initial?.locationName ?? '');
+  const [trafficInitiator,       setTrafficInitiator]       = useState(initial?.projectType === 'הסדרי_תנועה' ? (initial?.initiator ?? '') : '');
+  const [contacts,               setContacts]               = useState(initial?.contacts ?? '');
+  const [trafficClosureDuration, setTrafficClosureDuration] = useState(initial?.trafficClosureDuration ?? '');
+  const [contractor,             setContractor]             = useState(initial?.contractor ?? '');
+  const [managementCompany,      setManagementCompany]      = useState(initial?.managementCompany ?? '');
 
   // blockage (חסמים) fields
-  const [subProject,     setSubProject]     = useState('');
-  const [initiator,      setInitiator]      = useState('');
-  const [representative, setRepresentative] = useState('');
-  const [blockageStatus, setBlockageStatus] = useState('');
+  const [subProject,     setSubProject]     = useState(initial?.subProject ?? '');
+  const [initiator,      setInitiator]      = useState(initial?.projectType === 'שדרוג_תשתית' ? (initial?.initiator ?? '') : '');
+  const [representative, setRepresentative] = useState(initial?.representative ?? '');
+  const [blockageStatus, setBlockageStatus] = useState(initial?.blockageStatus ?? '');
 
   const isTraffic  = IS_TRAFFIC(projectType);
   const isBlockage = IS_BLOCKAGE(projectType);
@@ -120,7 +135,7 @@ export function AddProjectForm({ onSubmit, onClose }: AddProjectFormProps) {
 
         <div className="flex items-center gap-3 mb-6">
           <span className="w-3 h-3 rounded-full bg-green-500 inline-block" />
-          <h2 className="text-2xl font-bold text-gray-800">הוספת פרויקט חדש</h2>
+          <h2 className="text-2xl font-bold text-gray-800">{editing ? `עריכה: ${initial!.title}` : 'הוספת פרויקט חדש'}</h2>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -254,6 +269,7 @@ export function AddProjectForm({ onSubmit, onClose }: AddProjectFormProps) {
                   <label className="block text-sm font-medium text-gray-700 mb-1">יזם</label>
                   <select value={initiator} onChange={e => setInitiator(e.target.value)} className={selectCls()}>
                     <option value="">-- בחר יזם --</option>
+                    <CurrentOption value={initiator} known={['נת"י', 'רכבת ישראל', 'עיריה', 'מינהל']} />
                     <option>נת"י</option>
                     <option>רכבת ישראל</option>
                     <option>עיריה</option>
@@ -264,6 +280,7 @@ export function AddProjectForm({ onSubmit, onClose }: AddProjectFormProps) {
                   <label className="block text-sm font-medium text-gray-700 mb-1">נציג</label>
                   <select value={representative} onChange={e => setRepresentative(e.target.value)} className={selectCls()}>
                     <option value="">-- בחר נציג --</option>
+                    <CurrentOption value={representative} known={['ניסים חביב', 'אליאס איוב', 'גיל', 'גולן בליטי']} />
                     <option>ניסים חביב</option>
                     <option>אליאס איוב</option>
                     <option>גיל</option>
@@ -278,6 +295,7 @@ export function AddProjectForm({ onSubmit, onClose }: AddProjectFormProps) {
                   <label className="block text-sm font-medium text-gray-700 mb-1">חברת ניהול</label>
                   <select value={managementCompany} onChange={e => setManagementCompany(e.target.value)} className={selectCls()}>
                     <option value="">-- בחר חברה --</option>
+                    <CurrentOption value={managementCompany} known={['חפת', 'פרימוורה', 'חפת/פרימוורה', 'אפשטיין']} />
                     <option>חפת</option>
                     <option>פרימוורה</option>
                     <option>חפת/פרימוורה</option>
@@ -288,6 +306,7 @@ export function AddProjectForm({ onSubmit, onClose }: AddProjectFormProps) {
                   <label className="block text-sm font-medium text-gray-700 mb-1">סטטוס</label>
                   <select value={blockageStatus} onChange={e => setBlockageStatus(e.target.value)} className={selectCls()}>
                     <option value="">-- בחר סטטוס --</option>
+                    <CurrentOption value={blockageStatus} known={['מסירות', 'ביצוע', 'תאום תכנון מפורט', 'תיאום תכנון']} />
                     <option>מסירות</option>
                     <option>ביצוע</option>
                     <option>תאום תכנון מפורט</option>
@@ -372,7 +391,7 @@ export function AddProjectForm({ onSubmit, onClose }: AddProjectFormProps) {
           <div className="flex justify-start gap-3 pt-4 border-t border-gray-100">
             <button type="submit"
               className="px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium">
-              {isTraffic ? 'הוסף הסדר תנועה' : isBlockage ? 'הוסף חסם' : 'הוסף פרויקט'}
+              {editing ? 'שמור שינויים' : isTraffic ? 'הוסף הסדר תנועה' : isBlockage ? 'הוסף חסם' : 'הוסף פרויקט'}
             </button>
             <button type="button" onClick={onClose}
               className="px-5 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-gray-700">

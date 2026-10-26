@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Map } from './components/Map';
 import { StoryPanel } from './components/StoryPanel';
 import { StoryPoint, Project, RailSegment } from './types';
-import { Plus, Maximize2, Minimize2, CloudOff, Cloud, Loader2, Database, LogIn, LogOut } from 'lucide-react';
+import { Plus, Maximize2, Minimize2, CloudOff, Cloud, Loader2, Database, LogIn, LogOut, Users } from 'lucide-react';
 import { AddStationForm } from './components/AddStationForm';
 import { AddProjectForm } from './components/AddProjectForm';
 import {
@@ -13,6 +13,7 @@ import {
 } from './lib/sheets';
 import * as db from './lib/db';
 import { LoginModal } from './components/LoginModal';
+import { EditorsModal } from './components/EditorsModal';
 import { resolveTrafficLocations } from './lib/traffic';
 
 type SyncStatus = 'idle' | 'loading' | 'ok' | 'error';
@@ -35,14 +36,17 @@ function App() {
   // Supabase is the data source when it is configured; Google Sheets stays as the fallback
   const useDb = db.supabaseEnabled;
   const [userEmail,  setUserEmail]  = useState<string | null>(null);
-  const [editor,     setEditor]     = useState(false);
+  const [role,       setRole]       = useState<db.Role | null>(null);
+  const editor = role !== null;
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [showEditors,    setShowEditors]    = useState(false);
   const [login,      setLogin]      = useState<{ reason?: string; then?: () => void } | null>(null);
 
   useEffect(() => {
     if (!useDb) return;
     const apply = async (email: string | null) => {
       setUserEmail(email);
-      setEditor(email ? await db.isEditor() : false);
+      setRole(email ? await db.myRole() : null);
     };
     db.getSession().then(s => apply(s?.user.email ?? null));
     return db.onAuthChange(s => { apply(s?.user.email ?? null); });
@@ -208,6 +212,25 @@ function App() {
     }
   };
 
+  const handleUpdateProject = async (data: Omit<Project, 'id'>) => {
+    const target = editingProject;
+    setEditingProject(null);
+    if (!target) return;
+    try {
+      const saved = await db.updateProject({ ...data, id: target.id });
+      setProjects(prev => prev.map(p => (p.id === saved.id ? saved : p)));
+      setActiveProject(saved); setSyncStatus('ok');
+    } catch (e) { setSyncStatus('error'); setError(`שגיאה בעדכון: ${e instanceof Error ? e.message : e}`); }
+  };
+
+  const handleDeleteProject = async (p: Project) => {
+    try {
+      await db.deleteProject(p.id);
+      setProjects(prev => prev.filter(x => x.id !== p.id));
+      setActiveProject(a => (a?.id === p.id ? undefined : a)); setSyncStatus('ok');
+    } catch (e) { setSyncStatus('error'); setError(`שגיאה במחיקה: ${e instanceof Error ? e.message : e}`); }
+  };
+
   const handleAddProject = async (s: Omit<Project, 'id'>) => {
     if (useDb) {
       setShowAddProject(false);
@@ -288,8 +311,14 @@ function App() {
           </div>
           <div className="flex items-center gap-2">
             <SyncBadge />
+            {useDb && role === 'superadmin' && (
+              <button onClick={() => setShowEditors(true)} title="ניהול עורכים"
+                className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 rounded-lg hover:bg-gray-100">
+                <Users className="w-4 h-4" /><span className="hidden lg:inline">עורכים</span>
+              </button>
+            )}
             {useDb && (userEmail ? (
-              <button onClick={() => db.signOut()} title={`מחובר: ${userEmail}${editor ? ' (עורך)' : ''}`}
+              <button onClick={() => db.signOut()} title={`מחובר: ${userEmail}${role === 'superadmin' ? ' (מנהל על)' : role ? ' (עורך)' : ''} · לחץ להתנתקות`}
                 className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 rounded-lg hover:bg-gray-100">
                 <LogOut className="w-4 h-4" /><span className="hidden md:inline max-w-[10rem] truncate" dir="ltr">{userEmail.replace(`@${db.USERNAME_DOMAIN}`, "")}</span>
               </button>
@@ -330,6 +359,7 @@ function App() {
               projects={resolvedProjects} activeProject={activeProject} onProjectSelect={selectProject}
               segments={segments}     activeSegment={activeSegment} onSegmentSelect={selectSegment}
               isExpanded={isExpanded}
+              canEdit={useDb && editor} onEditProject={p => setEditingProject(p)} onDeleteProject={handleDeleteProject}
             />
           </div>
         </div>
@@ -341,6 +371,7 @@ function App() {
             projects={resolvedProjects} activeProject={activeProject} onProjectClick={selectProject}
             statusGeoJSON={statusGeoJSON}
             activeSegment={activeSegment}               onSegmentClick={selectSegment}
+            canEdit={useDb && editor} onEditProject={p => setEditingProject(p)} onDeleteProject={handleDeleteProject}
           />
         </div>
       </div>
@@ -348,14 +379,20 @@ function App() {
       {login && (
         <LoginModal reason={login.reason} onClose={() => setLogin(null)}
           onSignedIn={async () => {
-            const ok = await db.isEditor();
-            setEditor(ok);
+            const r = await db.myRole();
+            setRole(r);
+            const ok = r !== null;
             if (ok) { const then = login.then; setLogin(null); then?.(); }
             else setLogin({ reason: 'ההתחברות הצליחה, אבל המשתמש אינו מוגדר כעורך. פנה למנהל המערכת.' });
           }} />
       )}
       {showAddStation && <AddStationForm onSubmit={handleAddStation} onClose={() => setShowAddStation(false)} />}
       {showAddProject && <AddProjectForm onSubmit={handleAddProject} onClose={() => setShowAddProject(false)} />}
+      {editingProject && (
+        <AddProjectForm key={editingProject.id} initial={editingProject}
+          onSubmit={handleUpdateProject} onClose={() => setEditingProject(null)} />
+      )}
+      {showEditors && userEmail && <EditorsModal myEmail={userEmail} onClose={() => setShowEditors(false)} />}
 
       {/* Sheets diagnostic modal */}
       {diag && (

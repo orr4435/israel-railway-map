@@ -186,3 +186,33 @@ export async function isEditor(): Promise<boolean> {
   const { data, error } = await supabase.rpc('is_editor');
   return !error && data === true;
 }
+
+// ── Roles: editor (add, edit, delete records) and superadmin (also manages editors) ──
+export type Role = 'editor' | 'superadmin';
+
+/** The signed-in user's role, or null for viewers. Works before the role column exists (falls back to is_editor). */
+export async function myRole(): Promise<Role | null> {
+  if (!supabase) return null;
+  const { data, error } = await supabase.rpc('is_superadmin');
+  if (!error && data === true) return 'superadmin';
+  return (await isEditor()) ? 'editor' : null;
+}
+
+export interface EditorRow { email: string; role: Role; created_at?: string }
+
+export async function listEditors(): Promise<EditorRow[]> {
+  const { data, error } = await client().from('editors').select('email, role, created_at').order('role', { ascending: false }).order('email');
+  if (error) throw explain(error.message);
+  return (data ?? []) as EditorRow[];
+}
+
+export async function upsertEditor(userOrEmail: string, role: Role): Promise<void> {
+  const { error } = await client().from('editors').upsert({ email: toLoginEmail(userOrEmail), role }, { onConflict: 'email' });
+  if (error) throw explain(error.message);
+}
+
+export async function removeEditor(email: string): Promise<void> {
+  const { error, count } = await client().from('editors').delete({ count: 'exact' }).eq('email', email);
+  if (error) throw explain(error.message);
+  if (!count) throw new Error('לא ניתן להסיר את המשתמש (אי אפשר להסיר את עצמך)');
+}
