@@ -51,6 +51,9 @@ export function rowToProject(r: Row): Project {
     trafficClosureDuration: s(r.traffic_closure_duration),
     locationName:           s(r.location_name),
     contacts:               s(r.contacts),
+    department:             s(r.department),
+    adminHead:              s(r.admin_head),
+    arrangementStatus:      s(r.arrangement_status),
     initiator:              s(r.initiator),
     contractor:             s(r.contractor),
     managementCompany:      s(r.management_company),
@@ -78,6 +81,9 @@ function projectToRow(p: Omit<Project, 'id'>): Row {
     traffic_closure_duration: n(p.trafficClosureDuration),
     location_name:            n(p.locationName),
     contacts:                 n(p.contacts),
+    department:               n(p.department),
+    admin_head:               n(p.adminHead),
+    arrangement_status:       n(p.arrangementStatus),
     initiator:                n(p.initiator),
     contractor:               n(p.contractor),
     management_company:       n(p.managementCompany),
@@ -125,6 +131,7 @@ export async function loadCustomStations(): Promise<StoryPoint[]> {
 
 // ── Writes (editors only, enforced by the database) ───────────────────────────
 function explain(message: string): Error {
+  if (/[א-ת]/.test(message)) return new Error(message);   // our own Hebrew messages from the database functions
   if (/row-level security|permission denied/i.test(message)) return new Error('אין הרשאת עריכה. יש להתחבר עם משתמש עורך.');
   return new Error(message);
 }
@@ -198,21 +205,35 @@ export async function myRole(): Promise<Role | null> {
   return (await isEditor()) ? 'editor' : null;
 }
 
-export interface EditorRow { email: string; role: Role; created_at?: string }
+export interface EditorRow { email: string; role: Role; has_login: boolean; last_sign_in_at: string | null }
 
+// These call SECURITY DEFINER functions (supabase/setup_user_admin.sql) that check the caller is a superadmin.
 export async function listEditors(): Promise<EditorRow[]> {
-  const { data, error } = await client().from('editors').select('email, role, created_at').order('role', { ascending: false }).order('email');
+  const { data, error } = await client().rpc('admin_list_editors');
   if (error) throw explain(error.message);
   return (data ?? []) as EditorRow[];
 }
 
-export async function upsertEditor(userOrEmail: string, role: Role): Promise<void> {
-  const { error } = await client().from('editors').upsert({ email: toLoginEmail(userOrEmail), role }, { onConflict: 'email' });
+/** Creates the editor with a login and password, or updates the role (and the password when one is given). */
+export async function saveEditor(userOrEmail: string, password: string, role: Role): Promise<string> {
+  const { data, error } = await client().rpc('admin_save_editor', { p_user: userOrEmail, p_password: password, p_role: role });
+  if (error) throw explain(error.message);
+  return String(data);
+}
+
+export async function setEditorPassword(email: string, password: string): Promise<void> {
+  const { error } = await client().rpc('admin_set_password', { p_email: email, p_password: password });
   if (error) throw explain(error.message);
 }
 
+/** Removes the editor's rights and login account. */
 export async function removeEditor(email: string): Promise<void> {
-  const { error, count } = await client().from('editors').delete({ count: 'exact' }).eq('email', email);
+  const { error } = await client().rpc('admin_remove_editor', { p_email: email });
   if (error) throw explain(error.message);
-  if (!count) throw new Error('לא ניתן להסיר את המשתמש (אי אפשר להסיר את עצמך)');
+}
+
+/** Lets any signed-in user change their own password. */
+export async function changeMyPassword(password: string): Promise<void> {
+  const { error } = await client().auth.updateUser({ password });
+  if (error) throw new Error(error.message);
 }

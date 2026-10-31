@@ -1,6 +1,8 @@
 import { Fragment, useMemo, useState } from 'react';
-import { Search, ChevronDown, ChevronUp, MapPin, Phone, Building2, StickyNote, Wrench, Clock, Target, AlertTriangle, X, Pencil, Trash2 } from 'lucide-react';
+import { Search, ChevronDown, ChevronUp, MapPin, Phone, Building2, StickyNote, Wrench, Clock, Target, AlertTriangle, X, Pencil, Trash2, ClipboardCheck, Landmark } from 'lucide-react';
 import { Project } from '../types';
+import { toDirectImageUrl } from '../lib/image';
+import { ImageLightbox, ImageThumb } from './ImageLightbox';
 import { TRAFFIC_STATUS, TRAFFIC_STATUS_ORDER, TrafficStatus, getTrafficStatus, formatDate, parseDate } from '../lib/traffic';
 
 interface Props {
@@ -48,6 +50,7 @@ function Detail({ icon, label, children }: { icon: React.ReactNode; label: strin
 
 export function TrafficTab({ arrangements, activeProject, onSelect, isExpanded, canEdit, onEdit, onDelete }: Props) {
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
+  const [zoomImage, setZoomImage]   = useState<{ src: string; title: string } | null>(null);
   const [query,     setQuery]     = useState('');
   const [statusSet, setStatusSet] = useState<Set<TrafficStatus>>(new Set());
   const [initiator, setInitiator] = useState('');
@@ -71,7 +74,8 @@ export function TrafficTab({ arrangements, activeProject, onSelect, isExpanded, 
       .filter(r => statusSet.size === 0 || statusSet.has(r.status))
       .filter(r => !initiator || r.p.initiator?.trim() === initiator)
       .filter(r => !q || [r.p.title, r.p.locationName, r.p.matchedStation, r.p.initiator, r.p.contacts, r.p.contractor,
-                          r.p.managementCompany, r.p.trafficPurpose, r.p.notes]
+                          r.p.managementCompany, r.p.trafficPurpose, r.p.notes,
+                          r.p.department, r.p.adminHead, r.p.arrangementStatus]
                           .some(v => v?.toLowerCase().includes(q)))
       .sort((a, b) =>
         TRAFFIC_STATUS_ORDER.indexOf(a.status) - TRAFFIC_STATUS_ORDER.indexOf(b.status) ||
@@ -174,13 +178,25 @@ export function TrafficTab({ arrangements, activeProject, onSelect, isExpanded, 
                     {open && (
                       <tr className="border-b border-gray-100" style={{ background: st.color + '0a' }}>
                         <td colSpan={isExpanded ? 6 : 5} className="px-4 py-3">
+                          {p.image && (
+                            <div className="mb-3 max-w-xs">
+                              <ImageThumb src={toDirectImageUrl(p.image)} title={p.title} height={130}
+                                onOpen={() => setZoomImage({ src: toDirectImageUrl(p.image!), title: p.title })} />
+                            </div>
+                          )}
                           <div className={`grid gap-3 ${isExpanded ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                            <Detail icon={<Phone size={13} />} label="אנשי קשר וטלפונים">
+                            <Detail icon={<Phone size={13} />} label="נציג / אנשי קשר">
                               {p.contacts ? withPhoneLinks(p.contacts) : <span className="text-gray-400">לא הוזנו</span>}
                             </Detail>
                             <Detail icon={<Building2 size={13} />} label="יזם ההסדר">
                               {p.initiator || <span className="text-gray-400">לא הוזן</span>}
                             </Detail>
+                            {p.arrangementStatus && <Detail icon={<ClipboardCheck size={13} />} label="סטטוס">{p.arrangementStatus}</Detail>}
+                            {(p.department || p.adminHead) && (
+                              <Detail icon={<Landmark size={13} />} label="אגף וראש מנהלת">
+                                {[p.department && `אגף: ${p.department}`, p.adminHead && `ראש מנהלת: ${p.adminHead}`].filter(Boolean).join(' · ')}
+                              </Detail>
+                            )}
                             <Detail icon={<StickyNote size={13} />} label="הערות">
                               {p.notes || <span className="text-gray-400">אין הערות</span>}
                             </Detail>
@@ -231,6 +247,7 @@ export function TrafficTab({ arrangements, activeProject, onSelect, isExpanded, 
           </table>
         )}
       </div>
+      {zoomImage && <ImageLightbox src={zoomImage.src} title={zoomImage.title} onClose={() => setZoomImage(null)} />}
       <div className="px-3 py-1.5 border-t border-gray-100 text-[11px] text-gray-400 shrink-0">
         מוצגים {filtered.length} מתוך {arrangements.length} הסדרים
       </div>

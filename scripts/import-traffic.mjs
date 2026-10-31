@@ -37,12 +37,16 @@ const root = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace
 const NBSP = new RegExp(String.fromCharCode(0xa0), 'g');   // non-breaking spaces from Excel and station names
 const norm = s => String(s ?? '').replace(NBSP, ' ').replace(/["'״׳`]/g, '').replace(/\s+/g, ' ').trim();
 const ALIASES = {
-  title:             ['שם ההסדר', 'שם הסדר', 'הסדר תנועה', 'הסדר', 'שם', 'שם הפרויקט', 'נושא'],
+  title:             ['שם ההסדר', 'שם הסדר', 'הסדר תנועה', 'הסדר', 'שם', 'שם הפרויקט', 'שם פרויקט', 'נושא'],
   locationName:      ['מיקום', 'תחנה', 'מיקום/תחנה', 'מיקום / תחנה', 'אתר', 'מיקום ההסדר'],
   trafficStartDate:  ['תאריך התחלה', 'מועד התחלה', 'התחלה', 'מתאריך', 'תחילת ההסדר'],
   trafficClosureDate:['תאריך סיום', 'מועד סיום', 'סיום', 'עד תאריך', 'מועד סגירה', 'תאריך סגירה', 'סיום ההסדר'],
   initiator:         ['יזם', 'יזם ההסדר', 'גורם יוזם', 'היזם'],
-  contacts:          ['אנשי קשר וטלפונים', 'אנשי קשר', 'איש קשר', 'טלפון', 'טלפונים', 'נייד', 'נציג', 'פרטי קשר'],
+  contacts:          ['אנשי קשר וטלפונים', 'אנשי קשר', 'איש קשר', 'טלפון', 'טלפונים', 'נייד', 'נציג', 'נציג / אנשי קשר', 'נציג/ אנשי קשר', 'פרטי קשר'],
+  department:        ['אגף'],
+  adminHead:         ['ראש מנהלת', 'ראש המנהלת', 'ראש מינהלת'],
+  arrangementStatus: ['סטטוס', 'סטאטוס', 'סטטוס ההסדר'],
+  image:             ['תמונה', 'קישור לתמונה'],
   notes:             ['הערות', 'הערה'],
   trafficPurpose:    ['מטרת ההסדר', 'מטרה', 'תיאור', 'תיאור ההסדר'],
   contractor:        ['קבלן', 'קבלן מבצע'],
@@ -56,7 +60,8 @@ for (const [field, names] of Object.entries(ALIASES)) for (const n of names) ali
 
 const SHEET_HEADERS = ['id', 'title', 'projectType', 'lat', 'lng', 'geometry', 'targetYear', 'cost',
   'trafficPurpose', 'trafficStartDate', 'trafficClosureDate', 'trafficClosureDuration',
-  'locationName', 'contacts', 'initiator', 'contractor', 'managementCompany', 'image', 'notes', 'createdAt'];
+  'locationName', 'contacts', 'initiator', 'department', 'adminHead', 'arrangementStatus',
+  'contractor', 'managementCompany', 'image', 'notes', 'createdAt'];
 
 // ── dates ─────────────────────────────────────────────────────────────────────
 const pad = n => String(n).padStart(2, '0');
@@ -73,17 +78,38 @@ function toISO(v) {
 }
 
 // ── stations (same matching rules as src/lib/traffic.ts) ─────────────────────
-const normName = s => String(s ?? '').replace(NBSP, ' ').replace(/["'״׳`]/g, '').replace(/[-–—_/\\(),.]/g, ' ')
-  .replace(/\s+/g, ' ').replace(/(^|\s)(תחנת|תחנה|רכבת)(?=\s|$)/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+// common abbreviations in location names, for example "ראשל"צ משה דיין" (quotes are removed first)
+const ABBR = [['ראשלצ', 'ראשון לציון'], ['תא', 'תל אביב'], ['בש', 'באר שבע'], ['פת', 'פתח תקווה']];
+const normName = s => {
+  let v = String(s ?? '').replace(NBSP, ' ').replace(/["'״׳`]/g, '').replace(/[-–—_/\\(),.]/g, ' ').replace(/\s+/g, ' ').trim();
+  for (const [a, full] of ABBR) v = v.replace(new RegExp(`(^|\\s)${a}(?=\\s|$)`, 'g'), `$1${full}`);
+  return v.replace(/(^|\s)(תחנת|תחנה|רכבת)(?=\s|$)/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+};
 const stations = JSON.parse(fs.readFileSync(path.join(root, 'public', 'station.geojson'), 'utf8')).features
   .filter(f => f.geometry?.type === 'Point' && f.properties?.ASSET_NAME)
-  .map(f => ({ name: f.properties.ASSET_NAME, n: normName(f.properties.ASSET_NAME), lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0] }))
+  .map(f => ({ name: f.properties.ASSET_NAME, n: normName(f.properties.ASSET_NAME),
+               segs: String(f.properties.ASSET_NAME).split(/\s*[-–—]\s*/).map(normName).filter(Boolean),
+               lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0] }))
   .filter(s => s.n.length >= 2);
+const ambiguous = [];
+/**
+ * Exact name first; then a station with a dash-separated part equal to the text ("תל אביב - אוניברסיטה"
+ * for "אוניברסיטה"); then partial containment, longest name first. Several equally good matches are reported.
+ */
 function matchStation(loc) {
   const l = normName(loc);
   if (!l) return undefined;
-  return stations.find(s => s.n === l)
-    ?? stations.filter(s => l.includes(s.n) || (s.n.includes(l) && l.length >= 3)).sort((a, b) => b.n.length - a.n.length)[0];
+  const exact = stations.filter(s => s.n === l);
+  if (exact.length) return exact[0];
+  const bySegment = stations.filter(s => s.segs.length > 1 && s.segs.includes(l));
+  if (bySegment.length) {
+    if (bySegment.length > 1) ambiguous.push(`${loc} → ${bySegment.map(s => s.name).join(' / ')}`);
+    return bySegment[0];
+  }
+  const hasWords = (text, words) => ` ${text} `.includes(` ${words} `);   // whole words only ("דור" is not in "סבידור")
+  const contained = stations.filter(s => hasWords(l, s.n) || (hasWords(s.n, l) && l.length >= 3)).sort((a, b) => b.n.length - a.n.length);
+  if (contained.length > 1 && !hasWords(l, contained[0].n)) ambiguous.push(`${loc} → ${contained.map(s => s.name).join(' / ')} (נבחר: ${contained[0].name})`);
+  return contained[0];
 }
 
 // ── read the workbook ────────────────────────────────────────────────────────
@@ -138,6 +164,7 @@ if (sqlFile) {
   const isoOk = v => /^\d{4}-\d{2}-\d{2}$/.test(v ?? '');
   const dateNotes = [];
   const COLS = ['id', 'title', 'project_type', 'lat', 'lng', 'traffic_purpose', 'traffic_start_date', 'traffic_end_date',
+    'department', 'admin_head', 'arrangement_status', 'image',
     'traffic_closure_duration', 'location_name', 'contacts', 'initiator', 'contractor', 'management_company', 'notes'];
   const values = out.map(r => {
     // a date column only accepts real dates; free text (for example "עד הפעלת התחנה") is kept in the notes
@@ -151,6 +178,7 @@ if (sqlFile) {
       traffic_purpose: r.trafficPurpose, traffic_start_date: isoOk(r.trafficStartDate) ? r.trafficStartDate : null,
       traffic_end_date: isoOk(r.trafficClosureDate) ? r.trafficClosureDate : null, traffic_closure_duration: r.trafficClosureDuration,
       location_name: r.locationName, contacts: r.contacts, initiator: r.initiator, contractor: r.contractor,
+      department: r.department, admin_head: r.adminHead, arrangement_status: r.arrangementStatus, image: r.image,
       management_company: r.managementCompany, notes: [r.notes, ...extra].filter(Boolean).join('\n'),
     };
     return `  (${COLS.map(c => q(row[c])).join(', ')})`;
@@ -177,5 +205,6 @@ if (unknown.length) console.log(`columns ignored: ${unknown.join(', ')}`);
 console.log(`${out.length} arrangements written to ${outFile}`);
 console.log(`placed on map: ${report.located}, not placed: ${report.unlocated.length}`);
 report.unlocated.forEach(t => console.log(`  not placed: ${t}`));
+if (ambiguous.length) { console.log('check these locations, more than one station fits:'); ambiguous.forEach(a => console.log(`  ${a}`)); }
 if (report.noEnd.length) console.log(`missing end date (yellow warning): ${report.noEnd.length}`);
 if (report.noTitle) console.log(`rows skipped without a name: ${report.noTitle}`);

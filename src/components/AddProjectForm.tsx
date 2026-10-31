@@ -53,7 +53,10 @@ export function AddProjectForm({ onSubmit, onClose, initial }: AddProjectFormPro
   const [trafficInitiator,       setTrafficInitiator]       = useState(initial?.projectType === 'הסדרי_תנועה' ? (initial?.initiator ?? '') : '');
   const [contacts,               setContacts]               = useState(initial?.contacts ?? '');
   const [trafficClosureDuration, setTrafficClosureDuration] = useState(initial?.trafficClosureDuration ?? '');
-  const [contractor,             setContractor]             = useState(initial?.contractor ?? '');
+  const [contractor]                                         = useState(initial?.contractor ?? '');   // no longer in the form; kept on edit
+  const [department,             setDepartment]             = useState(initial?.department ?? '');
+  const [adminHead,              setAdminHead]              = useState(initial?.adminHead ?? '');
+  const [arrangementStatus,      setArrangementStatus]      = useState(initial?.arrangementStatus ?? '');
   const [managementCompany,      setManagementCompany]      = useState(initial?.managementCompany ?? '');
 
   // blockage (חסמים) fields
@@ -110,6 +113,9 @@ export function AddProjectForm({ onSubmit, onClose, initial }: AddProjectFormPro
       contacts:               isTraffic ? (contacts.trim()        || undefined) : undefined,
       trafficClosureDuration: isTraffic ? (trafficClosureDuration || undefined) : undefined,
       contractor:             isTraffic ? (contractor             || undefined) : undefined,
+      department:             isTraffic ? (department.trim()        || undefined) : undefined,
+      adminHead:              isTraffic ? (adminHead.trim()         || undefined) : undefined,
+      arrangementStatus:      isTraffic ? (arrangementStatus.trim() || undefined) : undefined,
       managementCompany:      (isTraffic || isBlockage) ? (managementCompany || undefined) : undefined,
       // blockage fields (undefined for non-blockage)
       subProject:     isBlockage ? (subProject     || undefined) : undefined,
@@ -212,7 +218,7 @@ export function AddProjectForm({ onSubmit, onClose, initial }: AddProjectFormPro
                 <p className="text-xs text-yellow-700 -mt-2">בלי תאריך סיום ההסדר יסומן במפה בתג אזהרה צהוב</p>
               )}
 
-              {/* מיקום + יזם */}
+              {/* מיקום + יזם ההסדר */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">מיקום (תחנה או אתר)</label>
@@ -228,28 +234,47 @@ export function AddProjectForm({ onSubmit, onClose, initial }: AddProjectFormPro
                 </div>
               </div>
 
-              {/* אנשי קשר */}
+              {/* אגף + ראש מנהלת */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">אגף</label>
+                  <input type="text" value={department} onChange={e => setDepartment(e.target.value)}
+                    className={inputCls()} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">ראש מנהלת</label>
+                  <input type="text" value={adminHead} onChange={e => setAdminHead(e.target.value)}
+                    className={inputCls()} />
+                </div>
+              </div>
+
+              {/* חברת ניהול */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">אנשי קשר וטלפונים</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">חברת ניהול</label>
+                <input type="text" value={managementCompany} onChange={e => setManagementCompany(e.target.value)}
+                  placeholder="שם חברת הניהול"
+                  className={inputCls()} />
+              </div>
+
+              {/* נציג / אנשי קשר */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">נציג / אנשי קשר</label>
                 <textarea value={contacts} onChange={e => setContacts(e.target.value)}
                   rows={2} placeholder="שם, תפקיד, טלפון. איש קשר בכל שורה"
                   className={`${inputCls()} resize-none`} />
               </div>
 
-              {/* קבלן + חברת ניהול */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">קבלן</label>
-                  <input type="text" value={contractor} onChange={e => setContractor(e.target.value)}
-                    placeholder="שם חברת הקבלן"
-                    className={inputCls()} />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">חברת ניהול</label>
-                  <input type="text" value={managementCompany} onChange={e => setManagementCompany(e.target.value)}
-                    placeholder="שם חברת הניהול"
-                    className={inputCls()} />
-                </div>
+              {/* סטטוס (ידני) */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">סטטוס</label>
+                <input type="text" list="arrangement-status-options" value={arrangementStatus}
+                  onChange={e => setArrangementStatus(e.target.value)} placeholder="בחר מהרשימה או הקלד"
+                  className={inputCls()} />
+                <datalist id="arrangement-status-options">
+                  <option value="בתכנון" /><option value="בהליך אישור" /><option value="מאושר" />
+                  <option value="בביצוע" /><option value="מושהה" /><option value="הסתיים" />
+                </datalist>
+                <p className="text-[11px] text-gray-400 mt-1">הצבע במפה נקבע אוטומטית לפי התאריכים. השדה הזה מתעד את מצב הטיפול בהסדר.</p>
               </div>
             </>
           ) : isBlockage ? (

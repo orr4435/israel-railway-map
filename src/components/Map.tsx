@@ -5,6 +5,7 @@ import { StoryPoint, Project, RailSegment, getStatusStyle, getSegmentStyle, STAT
 import { toDirectImageUrl } from '../lib/image';
 import { TRAFFIC_STATUS, TRAFFIC_STATUS_ORDER, TrafficStatus, getTrafficStatus, formatDate, isTraffic, hasCoords } from '../lib/traffic';
 import L from 'leaflet';
+import { ImageLightbox, ImageThumb } from './ImageLightbox';
 // ── Icons ─────────────────────────────────────────────────────────────────────
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -308,6 +309,7 @@ export function Map({ points, activePoint, onMarkerClick, projects, activeProjec
     });
   }, [blockageTitles]);
 
+  const [zoomImage, setZoomImage] = useState<{ src: string; title: string } | null>(null);
   const [trafficVis, setTrafficVis] = useState<Record<TrafficStatus, boolean>>({ upcoming: true, active: true, ended: true, no_end: true });
   const trafficStatusOf = useMemo(() => {
     const m: Record<string, TrafficStatus> = {};
@@ -486,6 +488,12 @@ export function Map({ points, activePoint, onMarkerClick, projects, activeProjec
               {isTraffic(project) ? (
                 <div dir="rtl" style={{ minWidth: 200, fontFamily: 'inherit' }}>
                   <strong style={{ display:'block', fontSize:14, marginBottom:4 }}>{project.title}</strong>
+                  {project.image && (
+                    <div style={{ margin: '4px 0 6px' }}>
+                      <ImageThumb src={toDirectImageUrl(project.image)} title={project.title}
+                        onOpen={() => setZoomImage({ src: toDirectImageUrl(project.image!), title: project.title })} />
+                    </div>
+                  )}
                   <span style={{ display:'inline-block', background: TRAFFIC_STATUS[trafficStatusOf[project.id]].color + '22',
                     color: trafficStatusOf[project.id] === 'no_end' ? '#854d0e' : TRAFFIC_STATUS[trafficStatusOf[project.id]].color,
                     border:`1px solid ${TRAFFIC_STATUS[trafficStatusOf[project.id]].color}66`, borderRadius:999, padding:'1px 8px',
@@ -512,9 +520,10 @@ export function Map({ points, activePoint, onMarkerClick, projects, activeProjec
                 <strong style={{ display:'block', color:'#166534', marginTop:2, fontSize:14 }}>{project.title}</strong>
 
                 {project.image && (
-                  <img src={toDirectImageUrl(project.image)} alt={project.title}
-                    style={{ width:'100%', height:110, objectFit:'cover', borderRadius:8, marginTop:6 }}
-                    onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+                  <div style={{ marginTop: 6 }}>
+                    <ImageThumb src={toDirectImageUrl(project.image)} title={project.title}
+                      onOpen={() => setZoomImage({ src: toDirectImageUrl(project.image!), title: project.title })} />
+                  </div>
                 )}
 
                 {project.projectType === 'הסדרי_תנועה' ? (
@@ -554,6 +563,8 @@ export function Map({ points, activePoint, onMarkerClick, projects, activeProjec
         <TrafficLegend counts={trafficCounts} visible={trafficVis}
           onToggle={st => setTrafficVis(v => ({ ...v, [st]: !v[st] }))} />
       )}
+
+      {zoomImage && <ImageLightbox src={zoomImage.src} title={zoomImage.title} onClose={() => setZoomImage(null)} />}
 
       <LayerControlPanel
         layers={layers}             onToggle={toggleLayer}

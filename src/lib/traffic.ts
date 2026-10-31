@@ -72,27 +72,43 @@ export function getTrafficStatus(p: Pick<Project, 'trafficStartDate' | 'trafficC
 }
 
 // ── Location by station name ("מיקום" column) ─────────────────────────────────
+// Common abbreviations in location names, for example "ראשל"צ משה דיין" (quotes are removed first).
+// Keep in sync with scripts/import-traffic.mjs.
+const ABBR: [string, string][] = [['ראשלצ', 'ראשון לציון'], ['תא', 'תל אביב'], ['בש', 'באר שבע'], ['פת', 'פתח תקווה']];
+
 export function normalizeName(s: string): string {
-  return s
+  let v = s
     .replace(new RegExp(String.fromCharCode(0xa0), 'g'), ' ')   // non-breaking spaces, common in station names
     .replace(/["'״׳`]/g, '')
     .replace(/[-–—_/\\(),.]/g, ' ')
     .replace(/\s+/g, ' ')
+    .trim();
+  for (const [abbr, full] of ABBR) v = v.replace(new RegExp(`(^|\\s)${abbr}(?=\\s|$)`, 'g'), `$1${full}`);
+  return v
     .replace(/(^|\s)(תחנת|תחנה|רכבת)(?=\s|$)/g, ' ')   // \b does not work with Hebrew letters
     .replace(/\s+/g, ' ')
     .trim()
     .toLowerCase();
 }
 
-/** Find the station whose name matches a free-text location. Exact match first, then the longest contained name. */
+const hasWords = (text: string, words: string) => ` ${text} `.includes(` ${words} `);   // "דור" is not in "סבידור"
+
+/**
+ * Find the station a free-text location refers to: exact name first; then a station with a dash-separated part
+ * equal to the text ("תל אביב - אוניברסיטה" for "אוניברסיטה"); then whole-word containment, longest name first.
+ */
 export function matchStation(location: string, stations: StoryPoint[]): StoryPoint | undefined {
   const loc = normalizeName(location);
   if (!loc) return undefined;
-  const named = stations.map(s => ({ s, n: normalizeName(s.title || '') })).filter(x => x.n.length >= 2);
+  const named = stations
+    .map(s => ({ s, n: normalizeName(s.title || ''), segs: (s.title || '').split(/\s*[-–—]\s*/).map(normalizeName).filter(Boolean) }))
+    .filter(x => x.n.length >= 2);
   const exact = named.find(x => x.n === loc);
   if (exact) return exact.s;
+  const bySegment = named.find(x => x.segs.length > 1 && x.segs.includes(loc));
+  if (bySegment) return bySegment.s;
   const contained = named
-    .filter(x => loc.includes(x.n) || (x.n.includes(loc) && loc.length >= 3))
+    .filter(x => hasWords(loc, x.n) || (hasWords(x.n, loc) && loc.length >= 3))
     .sort((a, b) => b.n.length - a.n.length);
   return contained[0]?.s;
 }

@@ -53,7 +53,10 @@ export interface Project {
   trafficClosureDate?: string;    // תאריך סיום (historically labelled "מועד סגירה משוער")
   trafficClosureDuration?: string;// משך סגירה משוער
   locationName?: string;          // מיקום: station or place name, places the point when lat/lng are missing
-  contacts?: string;              // אנשי קשר וטלפונים
+  contacts?: string;              // נציג / אנשי קשר וטלפונים
+  department?: string;            // אגף
+  adminHead?: string;             // ראש מנהלת
+  arrangementStatus?: string;     // סטטוס (entered by hand; the coloured status is computed from the dates)
   locationSource?: 'coords' | 'station' | 'none';  // computed at load time, not stored
   matchedStation?: string;                         // computed: station matched from locationName
   contractor?: string;            // קבלן
