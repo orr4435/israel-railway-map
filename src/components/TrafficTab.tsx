@@ -3,7 +3,7 @@ import { Search, ChevronDown, ChevronUp, MapPin, Phone, Building2, StickyNote, W
 import { Project } from '../types';
 import { toDirectImageUrl } from '../lib/image';
 import { ImageLightbox, ImageThumb } from './ImageLightbox';
-import { TRAFFIC_STATUS, TRAFFIC_STATUS_ORDER, TrafficStatus, getTrafficStatus, formatDate, parseDate } from '../lib/traffic';
+import { TRAFFIC_STATUS, TRAFFIC_STATUS_ORDER, TrafficStatus, getTrafficStatus, formatDateTime, combineDateTime, useMinuteTick } from '../lib/traffic';
 
 interface Props {
   arrangements: Project[];               // traffic arrangements only, locations already resolved
@@ -56,7 +56,9 @@ export function TrafficTab({ arrangements, activeProject, onSelect, isExpanded, 
   const [initiator, setInitiator] = useState('');
   const [openId,    setOpenId]    = useState<string | null>(null);
 
-  const rows = useMemo(() => arrangements.map(p => ({ p, status: getTrafficStatus(p) })), [arrangements]);
+  const tick = useMinuteTick();   // statuses follow the clock (start and end times)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const rows = useMemo(() => arrangements.map(p => ({ p, status: getTrafficStatus(p) })), [arrangements, tick]);
 
   const counts = useMemo(() => {
     const c: Record<TrafficStatus, number> = { upcoming: 0, active: 0, ended: 0, no_end: 0 };
@@ -79,8 +81,8 @@ export function TrafficTab({ arrangements, activeProject, onSelect, isExpanded, 
                           .some(v => v?.toLowerCase().includes(q)))
       .sort((a, b) =>
         TRAFFIC_STATUS_ORDER.indexOf(a.status) - TRAFFIC_STATUS_ORDER.indexOf(b.status) ||
-        (parseDate(a.p.trafficStartDate ?? a.p.trafficClosureDate)?.getTime() ?? Infinity) -
-        (parseDate(b.p.trafficStartDate ?? b.p.trafficClosureDate)?.getTime() ?? Infinity));
+        (combineDateTime(a.p.trafficStartDate ?? a.p.trafficClosureDate, a.p.trafficStartDate ? a.p.trafficStartTime : a.p.trafficEndTime)?.getTime() ?? Infinity) -
+        (combineDateTime(b.p.trafficStartDate ?? b.p.trafficClosureDate, b.p.trafficStartDate ? b.p.trafficStartTime : b.p.trafficEndTime)?.getTime() ?? Infinity));
   }, [rows, query, statusSet, initiator]);
 
   const toggleStatus = (s: TrafficStatus) => setStatusSet(prev => {
@@ -170,8 +172,8 @@ export function TrafficTab({ arrangements, activeProject, onSelect, isExpanded, 
                         )}
                       </td>
                       {isExpanded && <td className="px-2 py-2 text-xs text-gray-600 align-top">{where || '—'}</td>}
-                      <td className="px-2 py-2 text-xs text-gray-600 whitespace-nowrap align-top tabular-nums">{formatDate(p.trafficStartDate)}</td>
-                      <td className="px-2 py-2 text-xs text-gray-600 whitespace-nowrap align-top tabular-nums">{formatDate(p.trafficClosureDate)}</td>
+                      <td className="px-2 py-2 text-xs text-gray-600 whitespace-nowrap align-top tabular-nums">{formatDateTime(p.trafficStartDate, p.trafficStartTime)}</td>
+                      <td className="px-2 py-2 text-xs text-gray-600 whitespace-nowrap align-top tabular-nums">{formatDateTime(p.trafficClosureDate, p.trafficEndTime)}</td>
                       <td className="px-2 py-2 align-top"><StatusBadge status={status} small={!isExpanded} /></td>
                       <td className="px-1 py-2 align-top text-gray-400">{open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}</td>
                     </tr>

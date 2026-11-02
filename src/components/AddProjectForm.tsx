@@ -3,7 +3,7 @@ import { Project, PROJECT_TYPES, ProjectType, GeoGeometry, locationFromGeometry 
 import { X, Image as ImageIcon, AlertTriangle } from 'lucide-react';
 import { GeoPickerMap } from './GeoPickerMap';
 import { toDirectImageUrl, isUnsupportedImageUrl } from '../lib/image';
-import { parseDate, toInputDate, hasCoords } from '../lib/traffic';
+import { toInputDate, hasCoords, combineDateTime, normalizeTime } from '../lib/traffic';
 
 interface AddProjectFormProps {
   onSubmit: (project: Omit<Project, 'id'>) => void;
@@ -48,6 +48,8 @@ export function AddProjectForm({ onSubmit, onClose, initial }: AddProjectFormPro
   // traffic-arrangement fields
   const [trafficPurpose,         setTrafficPurpose]         = useState(initial?.trafficPurpose ?? '');
   const [trafficStartDate,       setTrafficStartDate]       = useState(toInputDate(initial?.trafficStartDate));
+  const [trafficStartTime,       setTrafficStartTime]       = useState(normalizeTime(initial?.trafficStartTime));
+  const [trafficEndTime,         setTrafficEndTime]         = useState(normalizeTime(initial?.trafficEndTime));
   const [trafficClosureDate,     setTrafficClosureDate]     = useState(toInputDate(initial?.trafficClosureDate));
   const [locationName,           setLocationName]           = useState(initial?.locationName ?? '');
   const [trafficInitiator,       setTrafficInitiator]       = useState(initial?.projectType === 'הסדרי_תנועה' ? (initial?.initiator ?? '') : '');
@@ -77,11 +79,14 @@ export function AddProjectForm({ onSubmit, onClose, initial }: AddProjectFormPro
 
   // a traffic arrangement may be placed by its station/location name instead of a point on the map
   const placedByName = isTraffic && !geometry && !!locationName.trim();
-  const datesInvalid = isTraffic && !!trafficStartDate && !!trafficClosureDate &&
-    (parseDate(trafficClosureDate)?.getTime() ?? 0) < (parseDate(trafficStartDate)?.getTime() ?? 0);
+  // the end (date + time) must not be before the start; a time without its date is not allowed
+  const startAt = combineDateTime(trafficStartDate, trafficStartTime, false);
+  const endAt   = combineDateTime(trafficClosureDate, trafficEndTime, true);
+  const datesInvalid = isTraffic && !!startAt && !!endAt && endAt < startAt;
+  const timeWithoutDate = isTraffic && ((!!trafficStartTime && !trafficStartDate) || (!!trafficEndTime && !trafficClosureDate));
 
   const validate = () => {
-    if (datesInvalid) return false;
+    if (datesInvalid || timeWithoutDate) return false;
     if (placedByName) return true;
     if (!geometry) return false;
     if (geometry.type === 'LineString' && geometry.coordinates.length < 2) return false;
@@ -108,6 +113,8 @@ export function AddProjectForm({ onSubmit, onClose, initial }: AddProjectFormPro
       // traffic fields (undefined for non-traffic)
       trafficPurpose:         isTraffic ? (trafficPurpose         || undefined) : undefined,
       trafficStartDate:       isTraffic ? (trafficStartDate       || undefined) : undefined,
+      trafficStartTime:       isTraffic ? (trafficStartTime       || undefined) : undefined,
+      trafficEndTime:         isTraffic ? (trafficEndTime         || undefined) : undefined,
       trafficClosureDate:     isTraffic ? (trafficClosureDate     || undefined) : undefined,
       locationName:           isTraffic ? (locationName.trim()    || undefined) : undefined,
       contacts:               isTraffic ? (contacts.trim()        || undefined) : undefined,
@@ -194,26 +201,37 @@ export function AddProjectForm({ onSubmit, onClose, initial }: AddProjectFormPro
                   className={`${inputCls()} resize-none`} />
               </div>
 
-              {/* תאריכים + משך */}
-              <div className="grid grid-cols-3 gap-4">
+              {/* מועד התחלה וסיום: תאריך + שעה */}
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">תאריך התחלה</label>
-                  <input type="date" value={trafficStartDate} onChange={e => setTrafficStartDate(e.target.value)}
-                    className={inputCls()} />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">תאריך ושעת התחלה</label>
+                  <div className="flex gap-2">
+                    <input type="date" value={trafficStartDate} onChange={e => setTrafficStartDate(e.target.value)}
+                      className={inputCls()} />
+                    <input type="time" value={trafficStartTime} onChange={e => setTrafficStartTime(e.target.value)}
+                      title="שעת התחלה" className={`${inputCls()} max-w-[7.5rem]`} />
+                  </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">תאריך סיום</label>
-                  <input type="date" value={trafficClosureDate} onChange={e => setTrafficClosureDate(e.target.value)}
-                    className={inputCls(datesInvalid ? 'focus:ring-red-500' : undefined)} />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">משך סגירה משוער</label>
-                  <input type="text" value={trafficClosureDuration} onChange={e => setTrafficClosureDuration(e.target.value)}
-                    placeholder="לדוגמה: 3 ימים"
-                    className={inputCls()} />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">תאריך ושעת סיום</label>
+                  <div className="flex gap-2">
+                    <input type="date" value={trafficClosureDate} onChange={e => setTrafficClosureDate(e.target.value)}
+                      className={inputCls(datesInvalid ? 'focus:ring-red-500' : undefined)} />
+                    <input type="time" value={trafficEndTime} onChange={e => setTrafficEndTime(e.target.value)}
+                      title="שעת סיום" className={`${inputCls(datesInvalid ? 'focus:ring-red-500' : undefined)} max-w-[7.5rem]`} />
+                  </div>
                 </div>
               </div>
-              {datesInvalid && <p className="text-xs text-red-600 -mt-2">תאריך הסיום מוקדם מתאריך ההתחלה</p>}
+              <p className="text-[11px] text-gray-400 -mt-2">השעה אופציונלית. בלי שעת התחלה ההסדר מתחיל ב-00:00, ובלי שעת סיום הוא נמשך עד סוף יום הסיום.</p>
+              {datesInvalid && <p className="text-xs text-red-600 -mt-2">מועד הסיום מוקדם ממועד ההתחלה</p>}
+              {timeWithoutDate && <p className="text-xs text-red-600 -mt-2">הוזנה שעה בלי תאריך. יש להזין גם את התאריך.</p>}
+
+              {/* משך סגירה */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">משך סגירה משוער</label>
+                <input type="text" value={trafficClosureDuration} onChange={e => setTrafficClosureDuration(e.target.value)}
+                  placeholder="לדוגמה: 3 ימים" className={inputCls()} />
+              </div>
               {isTraffic && !trafficClosureDate && (
                 <p className="text-xs text-yellow-700 -mt-2">בלי תאריך סיום ההסדר יסומן במפה בתג אזהרה צהוב</p>
               )}

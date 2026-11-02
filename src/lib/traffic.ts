@@ -1,12 +1,13 @@
+import { useEffect, useState } from 'react';
 import { Project, StoryPoint, GeoPoint } from '../types';
 
 // ── Traffic-arrangement status (derived from dates, never stored) ─────────────
 export type TrafficStatus = 'upcoming' | 'active' | 'ended' | 'no_end';
 
 export const TRAFFIC_STATUS: Record<TrafficStatus, { label: string; color: string; bg: string; text: string; legend: string }> = {
-  upcoming: { label: 'טרם החל',        color: '#f97316', bg: 'bg-orange-100', text: 'text-orange-700', legend: 'תאריך ההתחלה טרם הגיע' },
-  active:   { label: 'פעיל',           color: '#16a34a', bg: 'bg-green-100',  text: 'text-green-700',  legend: 'בין תאריך ההתחלה לסיום' },
-  ended:    { label: 'הסתיים',         color: '#dc2626', bg: 'bg-red-100',    text: 'text-red-700',    legend: 'תאריך הסיום חלף' },
+  upcoming: { label: 'טרם החל',        color: '#f97316', bg: 'bg-orange-100', text: 'text-orange-700', legend: 'מועד ההתחלה טרם הגיע' },
+  active:   { label: 'פעיל',           color: '#16a34a', bg: 'bg-green-100',  text: 'text-green-700',  legend: 'בין מועד ההתחלה לסיום' },
+  ended:    { label: 'הסתיים',         color: '#dc2626', bg: 'bg-red-100',    text: 'text-red-700',    legend: 'מועד הסיום חלף' },
   no_end:   { label: 'חסר תאריך סיום', color: '#eab308', bg: 'bg-yellow-100', text: 'text-yellow-800', legend: 'לא הוזן תאריך סיום' },
 };
 export const TRAFFIC_STATUS_ORDER: TrafficStatus[] = ['active', 'upcoming', 'ended', 'no_end'];
@@ -56,19 +57,54 @@ export function toInputDate(value?: string | null): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+/** "HH:MM" from "HH:MM", "HH:MM:SS", "H:MM" or "0630"; '' when it is not a valid time. */
+export function normalizeTime(value?: string | null): string {
+  const m = String(value ?? '').trim().match(/^(\d{1,2}):?(\d{2})(?::\d{2})?$/);
+  if (!m || +m[1] > 23 || +m[2] > 59) return '';
+  return `${m[1].padStart(2, '0')}:${m[2]}`;
+}
+
+/** Date + optional time as a local Date. Without a time: start of day, or end of day (23:59:59) when endOfDay. */
+export function combineDateTime(date?: string | null, time?: string | null, endOfDay = false): Date | null {
+  const d = parseDate(date);
+  if (!d) return null;
+  const t = normalizeTime(time);
+  if (t) d.setHours(+t.slice(0, 2), +t.slice(3, 5), endOfDay ? 59 : 0, endOfDay ? 999 : 0);
+  else if (endOfDay) d.setHours(23, 59, 59, 999);
+  return d;
+}
+
+/** "15/01/2027 06:30", or just the date when there is no time. */
+export function formatDateTime(date?: string | null, time?: string | null): string {
+  const t = normalizeTime(time);
+  return t && parseDate(date) ? `${formatDate(date)} ${t}` : formatDate(date);
+}
+
 /**
- * orange: start date not reached yet. green: between start and end (end day included).
- * red: end date passed. yellow warning: no end date.
- * A missing start date counts as "already started".
+ * orange: start (date + time) not reached yet. green: between start and end. red: end passed.
+ * yellow warning: no end date. A missing start counts as "already started"; a missing end time means
+ * the arrangement runs until the end of its end day.
  */
-export function getTrafficStatus(p: Pick<Project, 'trafficStartDate' | 'trafficClosureDate'>, today = new Date()): TrafficStatus {
-  const end = parseDate(p.trafficClosureDate);
+export function getTrafficStatus(
+  p: Pick<Project, 'trafficStartDate' | 'trafficClosureDate' | 'trafficStartTime' | 'trafficEndTime'>,
+  now = new Date(),
+): TrafficStatus {
+  const end = combineDateTime(p.trafficClosureDate, p.trafficEndTime, true);
   if (!end) return 'no_end';
-  const day = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  const start = parseDate(p.trafficStartDate);
-  if (start && day < start) return 'upcoming';
-  if (day > end) return 'ended';
+  const start = combineDateTime(p.trafficStartDate, p.trafficStartTime, false);
+  if (start && now < start) return 'upcoming';
+  if (now > end) return 'ended';
   return 'active';
+}
+
+/** Re-renders once a minute so statuses flip at the right time while the page stays open. */
+export function useMinuteTick(): number {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 60_000);
+    return () => clearInterval(id);
+  }, []);
+  return tick;
 }
 
 // ── Location by station name ("מיקום" column) ─────────────────────────────────

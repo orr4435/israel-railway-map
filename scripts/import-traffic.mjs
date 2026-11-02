@@ -41,6 +41,8 @@ const ALIASES = {
   locationName:      ['מיקום', 'תחנה', 'מיקום/תחנה', 'מיקום / תחנה', 'אתר', 'מיקום ההסדר'],
   trafficStartDate:  ['תאריך התחלה', 'מועד התחלה', 'התחלה', 'מתאריך', 'תחילת ההסדר'],
   trafficClosureDate:['תאריך סיום', 'מועד סיום', 'סיום', 'עד תאריך', 'מועד סגירה', 'תאריך סגירה', 'סיום ההסדר'],
+  trafficStartTime:  ['שעת התחלה', 'שעה התחלה', 'משעה'],
+  trafficEndTime:    ['שעת סיום', 'שעה סיום', 'עד שעה'],
   initiator:         ['יזם', 'יזם ההסדר', 'גורם יוזם', 'היזם'],
   contacts:          ['אנשי קשר וטלפונים', 'אנשי קשר', 'איש קשר', 'טלפון', 'טלפונים', 'נייד', 'נציג', 'נציג / אנשי קשר', 'נציג/ אנשי קשר', 'פרטי קשר'],
   department:        ['אגף'],
@@ -60,11 +62,21 @@ for (const [field, names] of Object.entries(ALIASES)) for (const n of names) ali
 
 const SHEET_HEADERS = ['id', 'title', 'projectType', 'lat', 'lng', 'geometry', 'targetYear', 'cost',
   'trafficPurpose', 'trafficStartDate', 'trafficClosureDate', 'trafficClosureDuration',
+  'trafficStartTime', 'trafficEndTime',
   'locationName', 'contacts', 'initiator', 'department', 'adminHead', 'arrangementStatus',
   'contractor', 'managementCompany', 'image', 'notes', 'createdAt'];
 
 // ── dates ─────────────────────────────────────────────────────────────────────
 const pad = n => String(n).padStart(2, '0');
+// Excel times arrive as Date objects (1899-12-30 HH:MM), day fractions, or text like 6:30 / 0630
+function toTime(v) {
+  if (v === undefined || v === null || v === '') return '';
+  if (v instanceof Date && !isNaN(v)) return `${pad(v.getHours())}:${pad(v.getMinutes())}`;
+  if (typeof v === 'number' && v >= 0 && v < 1) { const m = Math.round(v * 1440); return `${pad(Math.floor(m / 60))}:${pad(m % 60)}`; }
+  const m = String(v).trim().match(/^(\d{1,2}):?(\d{2})/);
+  return m && +m[1] < 24 && +m[2] < 60 ? `${pad(m[1])}:${m[2]}` : '';
+}
+
 function toISO(v) {
   if (v === undefined || v === null || v === '') return '';
   if (v instanceof Date && !isNaN(v)) return `${v.getFullYear()}-${pad(v.getMonth() + 1)}-${pad(v.getDate())}`;
@@ -135,7 +147,7 @@ for (const row of grid.slice(headerIdx + 1)) {
   const rec = {};
   row.forEach((cell, i) => {
     const f = colFields[i]; if (!f || cell === '' || cell === null) return;
-    const val = f.endsWith('Date') ? toISO(cell) : (cell instanceof Date ? toISO(cell) : String(cell).trim());
+    const val = f.endsWith('Time') ? toTime(cell) : f.endsWith('Date') ? toISO(cell) : (cell instanceof Date ? toISO(cell) : String(cell).trim());
     if (f === 'contacts' && rec.contacts) rec.contacts += ` · ${val}`;    // several contact/phone columns are joined
     else if (!rec[f]) rec[f] = val;
   });
@@ -164,7 +176,7 @@ if (sqlFile) {
   const isoOk = v => /^\d{4}-\d{2}-\d{2}$/.test(v ?? '');
   const dateNotes = [];
   const COLS = ['id', 'title', 'project_type', 'lat', 'lng', 'traffic_purpose', 'traffic_start_date', 'traffic_end_date',
-    'department', 'admin_head', 'arrangement_status', 'image',
+    'department', 'admin_head', 'arrangement_status', 'image', 'traffic_start_time', 'traffic_end_time',
     'traffic_closure_duration', 'location_name', 'contacts', 'initiator', 'contractor', 'management_company', 'notes'];
   const values = out.map(r => {
     // a date column only accepts real dates; free text (for example "עד הפעלת התחנה") is kept in the notes
@@ -179,6 +191,7 @@ if (sqlFile) {
       traffic_end_date: isoOk(r.trafficClosureDate) ? r.trafficClosureDate : null, traffic_closure_duration: r.trafficClosureDuration,
       location_name: r.locationName, contacts: r.contacts, initiator: r.initiator, contractor: r.contractor,
       department: r.department, admin_head: r.adminHead, arrangement_status: r.arrangementStatus, image: r.image,
+      traffic_start_time: r.trafficStartTime || null, traffic_end_time: r.trafficEndTime || null,
       management_company: r.managementCompany, notes: [r.notes, ...extra].filter(Boolean).join('\n'),
     };
     return `  (${COLS.map(c => q(row[c])).join(', ')})`;

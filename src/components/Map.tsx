@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, GeoJSON as Le
 import 'leaflet/dist/leaflet.css';
 import { StoryPoint, Project, RailSegment, getStatusStyle, getSegmentStyle, STATUS_COLORS, SEGMENT_STATUS_COLORS, PROJECT_TYPES } from '../types';
 import { toDirectImageUrl } from '../lib/image';
-import { TRAFFIC_STATUS, TRAFFIC_STATUS_ORDER, TrafficStatus, getTrafficStatus, formatDate, isTraffic, hasCoords } from '../lib/traffic';
+import { TRAFFIC_STATUS, TRAFFIC_STATUS_ORDER, TrafficStatus, getTrafficStatus, formatDateTime, isTraffic, hasCoords, useMinuteTick } from '../lib/traffic';
 import L from 'leaflet';
 import { ImageLightbox, ImageThumb } from './ImageLightbox';
 // ── Icons ─────────────────────────────────────────────────────────────────────
@@ -311,11 +311,13 @@ export function Map({ points, activePoint, onMarkerClick, projects, activeProjec
 
   const [zoomImage, setZoomImage] = useState<{ src: string; title: string } | null>(null);
   const [trafficVis, setTrafficVis] = useState<Record<TrafficStatus, boolean>>({ upcoming: true, active: true, ended: true, no_end: true });
+  const tick = useMinuteTick();   // statuses follow the clock (start and end times)
   const trafficStatusOf = useMemo(() => {
     const m: Record<string, TrafficStatus> = {};
     projects.filter(isTraffic).forEach(p => { m[p.id] = getTrafficStatus(p); });
     return m;
-  }, [projects]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projects, tick]);
   const trafficCounts = useMemo(() => {
     const c: Record<TrafficStatus, number> = { upcoming: 0, active: 0, ended: 0, no_end: 0 };
     projects.filter(p => isTraffic(p) && hasCoords(p.location)).forEach(p => c[trafficStatusOf[p.id]]++);
@@ -502,8 +504,8 @@ export function Map({ points, activePoint, onMarkerClick, projects, activeProjec
                   </span>
                   <table style={{ fontSize:12, color:'#444', width:'100%', borderCollapse:'collapse' }}>
                     <tbody>
-                      <tr><td style={{ color:'#888', padding:'2px 0' }}>תאריך התחלה</td><td style={{ paddingRight:10, fontWeight:600 }}>{formatDate(project.trafficStartDate)}</td></tr>
-                      <tr><td style={{ color:'#888', padding:'2px 0' }}>תאריך סיום</td><td style={{ paddingRight:10, fontWeight:600 }}>{formatDate(project.trafficClosureDate)}</td></tr>
+                      <tr><td style={{ color:'#888', padding:'2px 0' }}>התחלה</td><td style={{ paddingRight:10, fontWeight:600 }}>{formatDateTime(project.trafficStartDate, project.trafficStartTime)}</td></tr>
+                      <tr><td style={{ color:'#888', padding:'2px 0' }}>סיום</td><td style={{ paddingRight:10, fontWeight:600 }}>{formatDateTime(project.trafficClosureDate, project.trafficEndTime)}</td></tr>
                       {(project.locationName || project.matchedStation) && (
                         <tr><td style={{ color:'#888', padding:'2px 0' }}>מיקום</td><td style={{ paddingRight:10, fontWeight:600 }}>{project.locationName || project.matchedStation}</td></tr>
                       )}

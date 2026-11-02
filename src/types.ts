@@ -50,6 +50,8 @@ export interface Project {
   // Traffic-arrangement specific fields (used when projectType === 'הסדרי_תנועה')
   trafficPurpose?: string;        // מטרת ההסדר
   trafficStartDate?: string;      // תאריך התחלה
+  trafficStartTime?: string;      // שעת התחלה "HH:MM"
+  trafficEndTime?: string;        // שעת סיום "HH:MM"
   trafficClosureDate?: string;    // תאריך סיום (historically labelled "מועד סגירה משוער")
   trafficClosureDuration?: string;// משך סגירה משוער
   locationName?: string;          // מיקום: station or place name, places the point when lat/lng are missing
